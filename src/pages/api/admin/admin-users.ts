@@ -37,26 +37,75 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === "POST") {
       const parsed = z.object({
         email: z.string().trim().email().max(320).transform((value) => value.toLowerCase()),
+        password: z.string().min(12).max(128),
         role: z.enum(assignableRoles),
       }).safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Valid email and assignable role are required" });
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: "A valid email, temporary password of at least 12 characters, and assignable role are required",
+        });
+      }
 
-      const { data: profile, error: profileError } = await supabaseAdmin
+      const { data: existingProfile, error: profileError } = await supabaseAdmin
         .from("profiles")
         .select("id,email,is_admin,admin_role")
         .eq("email", parsed.data.email)
         .maybeSingle();
       if (profileError) throw profileError;
-      if (!profile) return res.status(404).json({ error: "Registered user not found" });
-      if (profile.is_admin) return res.status(409).json({ error: "This user is already an admin" });
+      if (existingProfile?.is_admin) {
+        return res.status(409).json({ error: "This user is already an admin" });
+      }
 
-      const { error } = await supabaseAdmin.from("profiles").update({
+      let profileId = existingProfile?.id;
+      let createdAuthUser = false;
+
+      if (!profileId) {
+        const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+          email: parsed.data.email,
+          password: parsed.data.password,
+          email_confirm: true,
+          user_metadata: {
+            force_password_change: true,
+            created_by_super_admin: auth.userId,
+          },
+        });
+
+        if (createUserError || !createdUser.user) {
+          throw createUserError || new Error("Unable to create the admin login");
+        }
+
+        profileId = createdUser.user.id;
+        createdAuthUser = true;
+      }
+
+      const { error: upsertError } = await supabaseAdmin.from("profiles").upsert({
+        id: profileId,
+        email: parsed.data.email,
         is_admin: true,
         admin_role: parsed.data.role,
-      }).eq("id", profile.id);
-      if (error) throw error;
-      await writeAudit(auth.userId, "admin_created", profile.id, { email: profile.email, role: parsed.data.role });
-      return res.status(201).json({ success: true });
+        is_suspended: false,
+      }, { onConflict: "id" });
+
+      if (upsertError) {
+        if (createdAuthUser) {
+          await supabaseAdmin.auth.admin.deleteUser(profileId);
+        }
+        throw upsertError;
+      }
+
+      await writeAudit(auth.userId, "admin_created", profileId, {
+        email: parsed.data.email,
+        role: parsed.data.role,
+        created_login: createdAuthUser,
+      });
+
+      return res.status(201).json({
+        success: true,
+        createdUser: createdAuthUser,
+        message: createdAuthUser
+          ? "Admin login and permissions created"
+          : "Existing user promoted to admin",
+      });
     }
 
     if (req.method === "PATCH") {
