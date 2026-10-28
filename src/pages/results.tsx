@@ -81,9 +81,9 @@ export default function Results() {
   }
 
   async function loadBalance(userId: string) {
-    const { data, error } = await db.rpc("get_user_wallet_balance", {
+    const { data, error } = await db.rpc("get_user_wallet_balance" as any, {
       p_user_id: userId
-    });
+    }) as { data: { cash_balance: number; bonus_balance: number } | null; error: any };
     
     if (!error && data) {
       setBalance(Number(data.cash_balance || 0) + Number(data.bonus_balance || 0));
@@ -208,14 +208,14 @@ export default function Results() {
         userStats.set(bet.user_id, current);
       }
 
-      // Get profiles for usernames
+      // Get profiles for usernames - use email instead of username
       const userIds = Array.from(userStats.keys());
       const { data: profiles } = await db
         .from("profiles")
-        .select("id, username")
+        .select("id, email")
         .in("id", userIds);
 
-      const profileMap = new Map(profiles?.map(p => [p.id, p.username || "Anonymous"]) || []);
+      const profileMap = new Map(profiles?.map(p => [p.id, p.email?.split('@')[0] || "Anonymous"]) || []);
 
       // Build leaderboard entries
       const entries: LeaderboardEntry[] = Array.from(userStats.entries()).map(([userId, stats]) => ({

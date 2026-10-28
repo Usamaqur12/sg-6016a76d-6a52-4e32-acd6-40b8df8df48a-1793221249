@@ -261,7 +261,7 @@ export default function SupportPage() {
                         <div className="flex-1">
                           <h3 className="font-semibold mb-1">{ticket.subject}</h3>
                           <p className="text-xs text-muted-foreground capitalize">
-                            {ticket.category} · <span className={getPriorityColor(ticket.priority)}>{ticket.priority} priority</span>
+                            {ticket.priority} priority
                           </p>
                         </div>
                         {getStatusBadge(ticket.status)}
@@ -296,7 +296,7 @@ export default function SupportPage() {
                         <div className="flex-1">
                           <h3 className="font-semibold mb-1">{ticket.subject}</h3>
                           <p className="text-xs text-muted-foreground capitalize">
-                            {ticket.category} · {ticket.priority} priority
+                            {ticket.priority} priority
                           </p>
                         </div>
                         {getStatusBadge(ticket.status)}
@@ -393,7 +393,7 @@ export default function SupportPage() {
               <div className="flex-1">
                 <DialogTitle>{selectedTicket?.subject}</DialogTitle>
                 <p className="text-sm text-muted-foreground capitalize mt-1">
-                  {selectedTicket?.category} · {selectedTicket?.priority} priority
+                  {selectedTicket?.priority} priority
                 </p>
               </div>
               {selectedTicket && getStatusBadge(selectedTicket.status)}
