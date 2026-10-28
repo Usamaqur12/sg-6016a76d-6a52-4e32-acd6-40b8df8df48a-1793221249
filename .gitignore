@@ -1,0 +1,65 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# next.js
+/.next*/
+/out/
+/.codex-*/
+/.codex-ui-actions.txt
+
+# production
+/build
+/cpanel-upload/
+/.npm-cache-cpanel/
+/.tmp-cpanel/
+/.next-cpanel-test/
+/*.zip
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+/logs/
+
+# local env files
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# firebase
+firebase-service-account.json
+.softgen/
+Digital_Asset_Exchange_Whitepaper_v0.1.docx
+/supabase/.temp/
+
+# Softgen - prevent committing dependencies and build artifacts
+dist/
+.cache/
+.turbo/
+.env.local
+.env.*.local
+*.key
+*.jwt
+service-account*.json
+credentials.json
+.git-credentials
+.secrets
+secrets/

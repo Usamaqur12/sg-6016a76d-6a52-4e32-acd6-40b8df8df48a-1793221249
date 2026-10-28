@@ -1,0 +1,327 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Reference Screenshot Color Palette - Exact Match */
+    --background: 210 60% 4%;           /* #020B16 - Main dark background */
+    --surface: 210 68% 6%;              /* #03111F - Primary sidebar/header */
+    --surface-elevated: 210 62% 8%;     /* #06182A - Secondary panels */
+    --card: 210 64% 11%;                /* #071C30 - Card background */
+    --raised: 210 60% 14%;              /* #0A2238 - Raised surfaces */
+    
+    --foreground: 210 20% 97%;          /* #F7FAFC - Primary text */
+    --muted-foreground: 210 20% 70%;    /* #A5B4C5 - Secondary text */
+    --subtle-foreground: 210 20% 54%;   /* #718399 - Muted text */
+    
+    /* Neon Green Primary */
+    --primary: 163 100% 45%;            /* #00E6A8 - Primary neon green */
+    --primary-bright: 163 100% 47%;     /* #00F0B5 - Bright CTA green */
+    --primary-hover: 163 91% 53%;       /* #18F2BC - Green hover */
+    --primary-foreground: 210 60% 4%;
+    
+    /* Cyan Accent */
+    --accent: 190 100% 46%;             /* #00C7E8 - Cyan accent */
+    --accent-foreground: 210 60% 4%;
+    
+    /* Status Colors */
+    --success: 163 100% 45%;            /* #00E6A8 - Matches primary */
+    --success-foreground: 210 60% 4%;
+    
+    --warning: 38 92% 50%;              /* #F59E0B - Amber */
+    --warning-foreground: 210 60% 4%;
+    
+    --danger: 352 100% 62%;             /* #FF3B5C - Live red */
+    --danger-foreground: 210 20% 97%;
+    
+    --gold: 45 93% 47%;                 /* #F59E0B - Gold */
+    --gold-foreground: 210 60% 4%;
+    
+    /* UI Elements */
+    --border: 210 52% 18%;              /* #12324A - Thin borders */
+    --input: 210 60% 14%;               /* #0A2238 - Input background */
+    --ring: 163 100% 45%;
+    
+    --odds-button: 210 64% 12%;         /* #0B2944 - Odds button bg */
+    --odds-selected: 163 100% 44%;      /* #00DFA2 - Selected odds */
+    
+    --muted: 210 60% 14%;               /* #0A2238 */
+    --secondary: 210 62% 8%;            /* #06182A */
+    --secondary-foreground: 210 20% 97%;
+    
+    --popover: 210 64% 11%;
+    --popover-foreground: 210 20% 97%;
+    
+    --destructive: 352 100% 62%;
+    --destructive-foreground: 210 20% 97%;
+    
+    --radius: 0.375rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Premium scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/30;
+  }
+}
+
+@layer components {
+  /* Surface utilities */
+  .surface {
+    @apply bg-surface border border-border rounded;
+  }
+  
+  .surface-elevated {
+    @apply bg-surface-elevated border border-border rounded;
+  }
+  
+  .surface-card {
+    @apply bg-card border border-border rounded;
+  }
+  
+  .surface-raised {
+    @apply bg-raised border border-border rounded;
+  }
+  
+  .surface-hover {
+    @apply transition-all duration-200 hover:border-primary/40 hover:shadow-[0_0_12px_rgba(0,230,168,0.08)];
+  }
+  
+  /* Neon glow effects */
+  .glow-green {
+    box-shadow: 0 0 10px rgba(0, 230, 168, 0.25);
+  }
+  
+  .glow-green-sm {
+    box-shadow: 0 0 6px rgba(0, 230, 168, 0.2);
+  }
+  
+  .glow-green-bright {
+    box-shadow: 0 0 12px rgba(0, 240, 181, 0.3);
+  }
+  
+  .glow-cyan {
+    box-shadow: 0 0 8px rgba(0, 199, 232, 0.2);
+  }
+  
+  /* Live pulse effect */
+  .live-pulse {
+    animation: live-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  @keyframes live-pulse {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 rgba(255, 59, 92, 0.7);
+    }
+    50% {
+      opacity: .8;
+      box-shadow: 0 0 0 6px rgba(255, 59, 92, 0);
+    }
+  }
+  
+  /* Odds button states */
+  .odds-button {
+    @apply relative px-2.5 py-1.5 rounded border border-border bg-[#0B2944] hover:bg-raised hover:border-primary/40 transition-all duration-150 cursor-pointer select-none text-sm font-bold font-mono;
+  }
+  
+  .odds-button-selected {
+    @apply bg-primary/10 border-primary text-primary glow-green-sm;
+  }
+  
+  .odds-button-locked {
+    @apply opacity-40 cursor-not-allowed hover:bg-[#0B2944] hover:border-border;
+  }
+  
+  .odds-button-up {
+    @apply bg-success/10 border-success/30;
+    animation: odds-flash-up 0.5s ease-out;
+  }
+  
+  .odds-button-down {
+    @apply bg-danger/10 border-danger/30;
+    animation: odds-flash-down 0.5s ease-out;
+  }
+  
+  @keyframes odds-flash-up {
+    0% { background-color: rgba(0, 230, 168, 0.2); }
+    100% { background-color: rgba(0, 230, 168, 0.05); }
+  }
+  
+  @keyframes odds-flash-down {
+    0% { background-color: rgba(255, 59, 92, 0.2); }
+    100% { background-color: rgba(255, 59, 92, 0.05); }
+  }
+  
+  /* Card hover effects */
+  .card-interactive {
+    @apply transition-all duration-200 hover:border-primary/25 hover:shadow-[0_0_12px_rgba(0,230,168,0.06)];
+  }
+  
+  /* Premium badge styles */
+  .badge-live {
+    @apply bg-danger/15 text-danger border border-danger/30 text-[10px] font-bold px-1.5 py-0.5 rounded-sm;
+  }
+  
+  .badge-featured {
+    @apply bg-primary/15 text-primary border border-primary/30 text-[10px] font-bold px-1.5 py-0.5 rounded-sm;
+  }
+  
+  .badge-popular {
+    @apply bg-success/15 text-success border border-success/30 text-[10px] font-bold px-1.5 py-0.5 rounded-sm;
+  }
+  
+  /* Compact header style */
+  .header-compact {
+    @apply h-12 border-b border-border bg-surface/[0.98] backdrop-blur-md sticky top-0 z-50;
+  }
+  
+  /* Section headers */
+  .section-header {
+    @apply flex items-center justify-between mb-2.5;
+  }
+  
+  .section-title {
+    @apply text-sm font-bold tracking-tight;
+  }
+  
+  /* League section header */
+  .league-header {
+    @apply flex items-center gap-2 px-3 py-1.5 bg-surface-elevated border-b border-border text-[10px] font-bold text-subtle-foreground uppercase tracking-wide;
+  }
+  
+  /* Event row hover */
+  .event-row {
+    @apply border-b border-border last:border-b-0 hover:bg-surface-elevated/50 transition-colors duration-100;
+  }
+  
+  /* Bet slip sticky */
+  .betslip-sticky {
+    @apply sticky top-14 max-h-[calc(100vh-3.5rem)] overflow-y-auto;
+  }
+  
+  /* Compact spacing utilities */
+  .compact-section {
+    @apply space-y-3;
+  }
+  
+  .compact-grid {
+    @apply grid gap-2;
+  }
+}
+
+@layer utilities {
+  /* Typography utilities */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Tabular numbers for odds */
+  .font-tabular {
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+  }
+  
+  /* Odds grid layouts */
+  .odds-grid-3 {
+    @apply grid grid-cols-3 gap-1.5;
+  }
+  
+  .odds-grid-2 {
+    @apply grid grid-cols-2 gap-1.5;
+  }
+  
+  /* Mobile bottom nav */
+  .mobile-nav {
+    @apply fixed bottom-0 left-0 right-0 h-14 bg-surface/[0.95] backdrop-blur-md border-t border-border z-50 lg:hidden;
+  }
+  
+  /* Truncate text */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* Premium animations */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s ease-out;
+}
+
+.animate-slide-down {
+  animation: slideDown 0.2s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* Prevent layout shift during animations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

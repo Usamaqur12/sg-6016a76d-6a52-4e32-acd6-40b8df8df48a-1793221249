@@ -1,0 +1,15 @@
+{
+  "name": "PrimeBet Demo Sportsbook",
+  "short_name": "PrimeBet",
+  "description": "Play-money sportsbook demo with live events, bet tracking and responsible-play controls.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090d14",
+  "theme_color": "#21d07a",
+  "orientation": "portrait-primary",
+  "categories": ["sports", "entertainment"],
+  "icons": [
+    { "src": "/primebet-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

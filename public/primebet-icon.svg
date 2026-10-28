@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PrimeBet">
+  <rect width="512" height="512" rx="96" fill="#090d14"/>
+  <path d="M132 104h146c73 0 118 39 118 104 0 68-48 109-124 109h-56v91h-84V104zm84 68v79h54c28 0 44-14 44-40 0-25-16-39-44-39h-54z" fill="#21d07a"/>
+  <circle cx="378" cy="370" r="46" fill="#f3b33d"/>
+</svg>
