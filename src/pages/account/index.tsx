@@ -60,9 +60,9 @@ export default function AccountPage() {
         .eq("id", user.id)
         .single();
 
-      const { data: wallet, error: walletError } = await supabase.rpc("get_user_wallet_balance", {
+      const { data: wallet, error: walletError } = await supabase.rpc("get_user_wallet_balance" as any, {
         p_user_id: user.id
-      });
+      }) as { data: { cash_balance: number; bonus_balance: number } | null; error: any };
 
       const { data: bets } = await supabase
         .from("bets")
