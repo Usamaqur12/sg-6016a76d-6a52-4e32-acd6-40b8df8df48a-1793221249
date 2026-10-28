@@ -192,21 +192,12 @@ export function Header({ user, onAuthClick }: HeaderProps) {
               </>
             ) : (
               <>
-                <Button variant="ghost" size="sm" onClick={onAuthClick} className="hidden sm:flex h-7 px-3 text-xs font-semibold">
+                <Button variant="ghost" size="sm" onClick={onAuthClick} className="h-7 px-3 text-xs font-semibold">
                   {t("login")}
                 </Button>
-                {!user && (
-                  <>
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href="/login">Login</Link>
-                    </Button>
-                    <Button asChild size="sm">
-                      <Link href="/register">
-                        Register
-                      </Link>
-                    </Button>
-                  </>
-                )}
+                <Button asChild size="sm">
+                  <Link href="/register">Register</Link>
+                </Button>
               </>
             )}
           </div>
