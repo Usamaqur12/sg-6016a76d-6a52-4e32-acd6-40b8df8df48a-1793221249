@@ -45,6 +45,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
   const [newAdminRole, setNewAdminRole] = useState<string>("admin");
   const [processing, setProcessing] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<string>("admin");
@@ -99,10 +100,10 @@ export default function AdminUsersPage() {
   }
 
   async function handleAddAdmin() {
-    if (!newAdminEmail || !newAdminRole) {
+    if (!newAdminEmail || !newAdminRole || newAdminPassword.length < 12) {
       toast({
         title: "Validation error",
-        description: "Email and role are required",
+        description: "Email, role, and a temporary password of at least 12 characters are required",
         variant: "destructive",
       });
       return;
@@ -110,18 +111,23 @@ export default function AdminUsersPage() {
 
     try {
       setProcessing(true);
-      await adminFetch("/api/admin/admin-users", {
+      const result = await adminFetch("/api/admin/admin-users", {
         method: "POST",
-        body: JSON.stringify({ email: newAdminEmail, role: newAdminRole }),
+        body: JSON.stringify({
+          email: newAdminEmail.trim(),
+          password: newAdminPassword,
+          role: newAdminRole,
+        }),
       });
 
       toast({
         title: "Admin added",
-        description: `${newAdminEmail} is now an admin with role: ${newAdminRole}`,
+        description: result.message || `${newAdminEmail} is now an admin with role: ${newAdminRole}`,
       });
 
       setShowAddDialog(false);
       setNewAdminEmail("");
+      setNewAdminPassword("");
       setNewAdminRole("admin");
       await loadAdmins();
     } catch (error: any) {
@@ -307,7 +313,7 @@ export default function AdminUsersPage() {
           <DialogHeader>
             <DialogTitle>Add New Admin</DialogTitle>
             <DialogDescription>
-              Promote an existing user to admin. User must be registered first.
+              Create a new admin login directly, or promote an existing user with the same email.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -322,13 +328,29 @@ export default function AdminUsersPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="temporary-password">Temporary Password</Label>
+              <Input
+                id="temporary-password"
+                type="password"
+                minLength={12}
+                maxLength={128}
+                autoComplete="new-password"
+                placeholder="At least 12 characters"
+                value={newAdminPassword}
+                onChange={(e) => setNewAdminPassword(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Share this securely. Existing registered users keep their current password.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="role">Admin Role</Label>
               <Select value={newAdminRole} onValueChange={(value: any) => setNewAdminRole(value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin (Full Access)</SelectItem>
+                  <SelectItem value="admin">Admin (Operational Access)</SelectItem>
                   <SelectItem value="finance">Finance</SelectItem>
                   <SelectItem value="kyc">KYC</SelectItem>
                   <SelectItem value="support">Support</SelectItem>
@@ -337,13 +359,13 @@ export default function AdminUsersPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                <strong>super_admin:</strong> Full access<br/>
-                <strong>admin:</strong> Full access<br/>
+                <strong>super_admin:</strong> Full platform access and admin management<br/>
+                <strong>admin:</strong> Operational access; no admin management, audit, monitoring, providers, or readiness<br/>
                 <strong>finance:</strong> Payments, transactions, crypto<br/>
                 <strong>kyc:</strong> KYC verification<br/>
                 <strong>support:</strong> User support, announcements<br/>
-                <strong>risk_manager:</strong> Risk, bets monitoring<br/>
-                <strong>sports_trader:</strong> Sports, trading, bets
+                <strong>risk_manager:</strong> Risk, audit, monitoring and bets<br/>
+                <strong>sports_trader:</strong> Sports, providers, trading and bets
               </p>
             </div>
           </div>
