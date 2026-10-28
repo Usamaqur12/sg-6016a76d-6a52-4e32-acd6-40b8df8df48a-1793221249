@@ -31,7 +31,30 @@ export type AdminArea =
   | "casino"
   | "sports_management";
 
-const AREA_ROLES: Record<AdminArea, AdminRole[]> = {
+/**
+ * The generic admin role is deliberately operational, not unrestricted.
+ * Security, audit, monitoring and provider configuration remain super-admin only.
+ */
+const GENERIC_ADMIN_AREAS: readonly AdminArea[] = [
+  "dashboard",
+  "users",
+  "kyc",
+  "bets",
+  "sports",
+  "transactions",
+  "payments",
+  "crypto",
+  "promotions",
+  "support",
+  "risk",
+  "reports",
+  "trading",
+  "announcements",
+  "brokers",
+  "casino",
+];
+
+const AREA_ROLES: Record<AdminArea, readonly AdminRole[]> = {
   dashboard: ["finance", "kyc", "support", "risk_manager", "sports_trader"],
   users: ["support"],
   kyc: ["kyc"],
@@ -62,13 +85,13 @@ export function canAccessAdminArea(
   area: AdminArea
 ): boolean {
   if (!isAdminRole(role)) return false;
-  if (role === "super_admin" || role === "admin") return true;
+  if (role === "super_admin") return true;
+  if (role === "admin") return GENERIC_ADMIN_AREAS.includes(area);
   return AREA_ROLES[area].includes(role);
 }
 
 export function hasAdminAccess(role: AdminRole | string, area: AdminArea): boolean {
-  if (role === "super_admin" || role === "admin") return true;
-  return AREA_ROLES[area].includes(role as AdminRole);
+  return canAccessAdminArea(role, area);
 }
 
 // Alias for backwards compatibility
