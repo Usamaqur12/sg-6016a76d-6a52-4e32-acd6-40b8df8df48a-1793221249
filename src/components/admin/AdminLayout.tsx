@@ -3,7 +3,7 @@ import { useRouter } from "next/router";
 import Link from "next/link";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { hasAdminAccess } from "@/lib/adminRoles";
+import { hasAdminAccess, type AdminArea } from "@/lib/adminRoles";
 import { 
   LayoutDashboard, Users, Receipt, CreditCard, Gift, 
   MessageSquare, AlertTriangle, BarChart3, Shield,
@@ -11,6 +11,34 @@ import {
   Settings, LogOut, Bitcoin, LineChart, Activity, Trophy, Coins, Bell, Dices, CheckCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+type RouteRequirement = AdminArea | "super_admin";
+
+const ADMIN_ROUTE_ACCESS: Record<string, RouteRequirement> = {
+  "/admin": "dashboard",
+  "/admin/admin-users": "super_admin",
+  "/admin/users": "users",
+  "/admin/kyc": "kyc",
+  "/admin/bets": "bets",
+  "/admin/sports": "sports",
+  "/admin/transactions": "transactions",
+  "/admin/payments": "payments",
+  "/admin/crypto": "crypto",
+  "/admin/promotions": "promotions",
+  "/admin/support": "support",
+  "/admin/risk": "risk",
+  "/admin/reports": "reports",
+  "/admin/audit": "audit",
+  "/admin/monitoring": "monitoring",
+  "/admin/trading": "trading",
+  "/admin/announcements": "announcements",
+  "/admin/brokers": "brokers",
+  "/admin/casino": "casino",
+  "/admin/providers": "sports_management",
+  "/admin/readiness": "super_admin",
+  "/admin/settings": "super_admin",
+  "/admin/features": "super_admin",
+};
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -41,7 +69,27 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         }
 
         // 2FA requirement removed per user request
-        setAdminRole(profile.admin_role || "admin");
+        const role = profile.admin_role || "admin";
+        const requiredAccess = ADMIN_ROUTE_ACCESS[router.pathname];
+
+        const denied =
+          requiredAccess === "super_admin"
+            ? role !== "super_admin"
+            : requiredAccess
+              ? !hasAdminAccess(role, requiredAccess)
+              : router.pathname.startsWith("/admin/") && router.pathname !== "/admin/login" && role !== "super_admin";
+
+        if (denied) {
+          toast({
+            title: "Access denied",
+            description: "Your admin role does not allow this section",
+            variant: "destructive",
+          });
+          await router.replace("/admin");
+          return;
+        }
+
+        setAdminRole(role);
         setLoading(false);
       } catch (error) {
         console.error("Auth check failed:", error);
@@ -87,7 +135,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: "/admin/brokers", label: "Brokers", icon: Users, areas: ["brokers"] },
     { href: "/admin/casino", label: "Casino", icon: Dices, areas: ["casino"] },
     { href: "/admin/providers", label: "Providers", icon: Settings, areas: ["sports_management"] },
-    { href: "/admin/readiness", label: "Readiness", icon: CheckCircle, areas: [] },
+    { href: "/admin/readiness", label: "Readiness", icon: CheckCircle, areas: [], superAdminOnly: true },
   ];
 
   // Filter navigation based on role
@@ -95,14 +143,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     // Super admin only items
     if (item.superAdminOnly) return adminRole === "super_admin";
 
-    // Super admin and generic admin see all non-privileged sections
-    if (adminRole === "super_admin" || adminRole === "admin") return true;
-    
-    // Dashboard and readiness are visible to all admins
-    if (item.areas.length === 0) return true;
-    
-    // Check if user has access to any of the item's areas
-    return item.areas.some(area => hasAdminAccess(adminRole, area as any));
+    if (adminRole === "super_admin") return true;
+
+    // Every non-super-admin entry must be explicitly allowed for the active role.
+    if (item.areas.length === 0) return false;
+
+    return item.areas.some((area) => hasAdminAccess(adminRole, area as AdminArea));
   });
 
   return (
