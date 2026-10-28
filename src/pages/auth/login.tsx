@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { supabase } from "@/integrations/supabase/client";
-import { ensureUserProfile } from "@/services/authService";
+import { authService } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,22 +33,18 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // Use authService.signIn with trimmed email
+      const { user, session, error: authError } = await authService.signIn(email.trim(), password);
 
       if (authError) {
-        throw authError;
+        throw new Error(authError.message);
       }
 
-      if (data.user) {
-        const profileError = await ensureUserProfile(data.user);
-        if (profileError) {
-          throw new Error(profileError.message);
-        }
+      if (!user || !session) {
+        throw new Error("Login failed - no user or session returned");
       }
 
+      // Check MFA requirement
       const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       if (!assurance.error && assurance.data.currentLevel === "aal1" && assurance.data.nextLevel === "aal2") {
         const factors = await supabase.auth.mfa.listFactors();

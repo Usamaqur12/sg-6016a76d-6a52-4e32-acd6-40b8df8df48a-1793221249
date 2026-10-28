@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { supabase } from "@/integrations/supabase/client";
-import { ensureUserProfile } from "@/services/authService";
+import { authService } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,34 +48,21 @@ export default function RegisterPage() {
     }
 
     try {
-      const emailRedirectTo =
-        typeof window !== "undefined" ? `${window.location.origin}/auth/login?confirmed=1` : undefined;
-
-      const { data, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: emailRedirectTo
-          ? {
-              emailRedirectTo,
-            }
-          : undefined,
-      });
+      // Use authService.signUp with trimmed email
+      const { user, session, error: authError } = await authService.signUp(email.trim(), password);
 
       if (authError) {
-        throw authError;
+        throw new Error(authError.message);
       }
 
-      if (data.user && data.session) {
-        const profileError = await ensureUserProfile(data.user);
-        if (profileError) {
-          throw new Error(profileError.message);
-        }
-
+      // If user and session exist, account is active immediately
+      if (user && session) {
         setSuccessState("active");
         window.setTimeout(() => {
           void router.push("/");
         }, 1500);
       } else {
+        // Email verification required
         setSuccessState("verify_email");
       }
     } catch (err: unknown) {
