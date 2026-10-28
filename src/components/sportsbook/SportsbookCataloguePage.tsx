@@ -57,12 +57,15 @@ export function SportsbookCataloguePage({
   const [sort, setSort] = useState<SportsbookSort>("soonest");
 
   const loadProfile = useCallback(async (userId: string) => {
-    const { data } = await db
-      .from("wallet_accounts")
-      .select("balance")
-      .eq("user_id", userId)
-      .maybeSingle();
-    setBalance(Number(data?.balance ?? 0));
+    const { data, error } = await db.rpc("get_user_wallet_balance", {
+      p_user_id: userId
+    });
+    
+    if (!error && data) {
+      setBalance(Number(data.cash_balance || 0) + Number(data.bonus_balance || 0));
+    } else {
+      setBalance(0);
+    }
   }, []);
 
   const loadFavorites = useCallback(async (userId: string) => {

@@ -111,12 +111,12 @@ export default function AdminUsers() {
         .order("created_at", { ascending: false });
 
       if (profiles) {
-        // Get wallet balances
-        const { data: wallets } = await supabase
-          .from("wallet_accounts")
-          .select("user_id, balance")
-          .in("user_id", profiles.map(p => p.id));
-
+        // Get wallet balances using RPC for each user
+        const walletPromises = profiles.map(p => 
+          supabase.rpc("get_user_wallet_balance", { p_user_id: p.id })
+        );
+        const walletResults = await Promise.all(walletPromises);
+        
         // Get bet counts
         const { data: betCounts } = await supabase
           .from("bets")
@@ -131,7 +131,14 @@ export default function AdminUsers() {
           .eq("status", "completed")
           .in("user_id", profiles.map(p => p.id));
 
-        const walletMap = new Map(wallets?.map(w => [w.user_id, Number(w.balance)]) || []);
+        const walletMap = new Map<string, number>();
+        profiles.forEach((p, idx) => {
+          const result = walletResults[idx];
+          if (!result.error && result.data) {
+            walletMap.set(p.id, Number(result.data.cash_balance || 0) + Number(result.data.bonus_balance || 0));
+          }
+        });
+
         const betCountMap = new Map<string, number>();
         betCounts?.forEach(b => {
           betCountMap.set(b.user_id, (betCountMap.get(b.user_id) || 0) + 1);

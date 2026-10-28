@@ -74,13 +74,15 @@ export default function Home() {
   }, []);
 
   const loadProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from("wallet_accounts")
-      .select("balance")
-      .eq("user_id", userId)
-      .maybeSingle();
+    const { data, error } = await supabase.rpc("get_user_wallet_balance", {
+      p_user_id: userId
+    });
 
-    setProfile({ balance: Number(data?.balance ?? 0) });
+    if (!error && data) {
+      setProfile({ balance: Number(data.cash_balance || 0) + Number(data.bonus_balance || 0) });
+    } else {
+      setProfile({ balance: 0 });
+    }
   };
 
   function handleOddsClick(event: SportsbookEvent, outcome?: SportsbookOutcome, marketName = "Match Result") {

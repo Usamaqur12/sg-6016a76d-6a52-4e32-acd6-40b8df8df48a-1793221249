@@ -80,9 +80,9 @@ export default function MyBets() {
 
     setUser({ id: authUser.id, email: authUser.email });
 
-    const [{ data: nextProfile }, { data: walletAccount }] = await Promise.all([
+    const [{ data: nextProfile }, walletResult] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", authUser.id).maybeSingle(),
-      supabase.from("wallet_accounts").select("balance, bonus_balance").eq("user_id", authUser.id).maybeSingle(),
+      supabase.rpc("get_user_wallet_balance", { p_user_id: authUser.id })
     ]);
 
     setProfile(
@@ -95,7 +95,12 @@ export default function MyBets() {
       }
     );
 
-    setHeaderBalance(Number(walletAccount?.balance ?? 0) + Number(walletAccount?.bonus_balance ?? 0));
+    if (!walletResult.error && walletResult.data) {
+      setHeaderBalance(Number(walletResult.data.cash_balance || 0) + Number(walletResult.data.bonus_balance || 0));
+    } else {
+      setHeaderBalance(0);
+    }
+    
     await loadBets(authUser.id);
   }
 

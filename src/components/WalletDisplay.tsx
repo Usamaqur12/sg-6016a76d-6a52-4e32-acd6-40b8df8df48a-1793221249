@@ -46,16 +46,17 @@ export function WalletDisplay({ userId, showDetails = false, compact = false }: 
         return;
       }
 
-      // Get wallet account
-      const { data: wallet, error } = await supabase
-        .from("wallet_accounts")
-        .select("balance, currency")
-        .eq("user_id", targetUserId)
-        .single();
+      // Get wallet balance using RPC function
+      const { data: balanceData, error } = await supabase.rpc("get_user_wallet_balance", {
+        p_user_id: targetUserId
+      });
 
       if (error) throw error;
 
-      setBalance(wallet);
+      setBalance({
+        balance: Number(balanceData?.cash_balance || 0) + Number(balanceData?.bonus_balance || 0),
+        currency: "USD"
+      });
 
       // Load transactions if showing details
       if (showDetails) {

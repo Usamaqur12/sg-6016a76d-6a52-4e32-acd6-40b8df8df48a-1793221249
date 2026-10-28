@@ -46,12 +46,15 @@ export default function Sports() {
   const [sort, setSort] = useState<SportsbookSort>("soonest");
 
   const loadProfile = useCallback(async (userId: string) => {
-    const { data } = await db
-      .from("wallet_accounts")
-      .select("balance")
-      .eq("user_id", userId)
-      .maybeSingle();
-    setProfile({ balance: Number(data?.balance ?? 0) });
+    const { data, error } = await db.rpc("get_user_wallet_balance", {
+      p_user_id: userId
+    });
+    
+    if (!error && data) {
+      setProfile({ balance: Number(data.cash_balance || 0) + Number(data.bonus_balance || 0) });
+    } else {
+      setProfile({ balance: 0 });
+    }
   }, []);
 
   async function loadEvents() {

@@ -15,9 +15,67 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_approval_requests: {
+        Row: {
+          action_type: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          entity_id: string
+          id: string
+          payload: Json
+          request_note: string | null
+          requested_by: string
+          status: string
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          entity_id: string
+          id?: string
+          payload?: Json
+          request_note?: string | null
+          requested_by: string
+          status?: string
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          entity_id?: string
+          id?: string
+          payload?: Json
+          request_note?: string | null
+          requested_by?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_approval_requests_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_approval_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           created_at: string
+          created_by: string | null
           expires_at: string | null
           id: string
           is_active: boolean
@@ -30,6 +88,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          created_by?: string | null
           expires_at?: string | null
           id?: string
           is_active?: boolean
@@ -42,6 +101,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          created_by?: string | null
           expires_at?: string | null
           id?: string
           is_active?: boolean
@@ -52,14 +112,22 @@ export type Database = {
           type?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "announcements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       audit_logs: {
         Row: {
           action: string
           admin_id: string
           changes: Json | null
-          created_at: string
+          created_at: string | null
           entity_id: string | null
           entity_type: string
           id: string
@@ -70,7 +138,7 @@ export type Database = {
           action: string
           admin_id: string
           changes?: Json | null
-          created_at?: string
+          created_at?: string | null
           entity_id?: string | null
           entity_type: string
           id?: string
@@ -81,7 +149,7 @@ export type Database = {
           action?: string
           admin_id?: string
           changes?: Json | null
-          created_at?: string
+          created_at?: string | null
           entity_id?: string | null
           entity_type?: string
           id?: string
@@ -101,86 +169,124 @@ export type Database = {
       background_jobs: {
         Row: {
           completed_at: string | null
-          created_at: string
+          created_at: string | null
           dedupe_key: string | null
           error_message: string | null
           id: string
           job_type: string
-          max_retries: number
+          max_retries: number | null
           payload: Json
-          priority: number
+          priority: number | null
           result: Json | null
-          retry_count: number
-          scheduled_at: string
+          retry_count: number | null
+          scheduled_at: string | null
           started_at: string | null
           status: string
         }
         Insert: {
           completed_at?: string | null
-          created_at?: string
+          created_at?: string | null
           dedupe_key?: string | null
           error_message?: string | null
           id?: string
           job_type: string
-          max_retries?: number
-          payload?: Json
-          priority?: number
+          max_retries?: number | null
+          payload: Json
+          priority?: number | null
           result?: Json | null
-          retry_count?: number
-          scheduled_at?: string
+          retry_count?: number | null
+          scheduled_at?: string | null
           started_at?: string | null
           status?: string
         }
         Update: {
           completed_at?: string | null
-          created_at?: string
+          created_at?: string | null
           dedupe_key?: string | null
           error_message?: string | null
           id?: string
           job_type?: string
-          max_retries?: number
+          max_retries?: number | null
           payload?: Json
-          priority?: number
+          priority?: number | null
           result?: Json | null
-          retry_count?: number
-          scheduled_at?: string
+          retry_count?: number | null
+          scheduled_at?: string | null
           started_at?: string | null
           status?: string
         }
         Relationships: []
       }
+      bet_idempotency: {
+        Row: {
+          bet_id: string | null
+          created_at: string | null
+          expires_at: string
+          id: string
+          idempotency_key: string
+          request_hash: string
+          user_id: string
+        }
+        Insert: {
+          bet_id?: string | null
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          idempotency_key: string
+          request_hash: string
+          user_id: string
+        }
+        Update: {
+          bet_id?: string | null
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          idempotency_key?: string
+          request_hash?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bet_idempotency_bet_id_fkey"
+            columns: ["bet_id"]
+            isOneToOne: false
+            referencedRelation: "bets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bet_selections: {
         Row: {
           bet_id: string
-          created_at: string
+          created_at: string | null
           event_id: string
           id: string
           market_id: string
           odds_id: string
           odds_value: number
-          result: string
+          result: string | null
           selection: string
         }
         Insert: {
           bet_id: string
-          created_at?: string
+          created_at?: string | null
           event_id: string
           id?: string
           market_id: string
           odds_id: string
           odds_value: number
-          result?: string
+          result?: string | null
           selection: string
         }
         Update: {
           bet_id?: string
-          created_at?: string
+          created_at?: string | null
           event_id?: string
           id?: string
           market_id?: string
           odds_id?: string
           odds_value?: number
-          result?: string
+          result?: string | null
           selection?: string
         }
         Relationships: [
@@ -276,39 +382,39 @@ export type Database = {
       }
       bets: {
         Row: {
-          created_at: string
+          created_at: string | null
           id: string
           payout: number | null
           potential_return: number
           settled_at: string | null
           stake: number
-          status: string
+          status: string | null
           total_odds: number
           type: string
           user_id: string
           wallet_transaction_id: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           id?: string
           payout?: number | null
           potential_return: number
           settled_at?: string | null
           stake: number
-          status?: string
+          status?: string | null
           total_odds: number
           type: string
           user_id: string
           wallet_transaction_id?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           id?: string
           payout?: number | null
           potential_return?: number
           settled_at?: string | null
           stake?: number
-          status?: string
+          status?: string | null
           total_odds?: number
           type?: string
           user_id?: string
@@ -316,10 +422,240 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "bets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "bets_wallet_transaction_id_fkey"
             columns: ["wallet_transaction_id"]
             isOneToOne: false
             referencedRelation: "wallet_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broker_commissions: {
+        Row: {
+          approved_at: string | null
+          bet_id: string
+          broker_id: string
+          commission_amount: number
+          commission_bps: number
+          created_at: string
+          gross_revenue: number
+          id: string
+          paid_at: string | null
+          player_id: string
+          status: string
+        }
+        Insert: {
+          approved_at?: string | null
+          bet_id: string
+          broker_id: string
+          commission_amount: number
+          commission_bps: number
+          created_at?: string
+          gross_revenue: number
+          id?: string
+          paid_at?: string | null
+          player_id: string
+          status?: string
+        }
+        Update: {
+          approved_at?: string | null
+          bet_id?: string
+          broker_id?: string
+          commission_amount?: number
+          commission_bps?: number
+          created_at?: string
+          gross_revenue?: number
+          id?: string
+          paid_at?: string | null
+          player_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_commissions_bet_id_fkey"
+            columns: ["bet_id"]
+            isOneToOne: true
+            referencedRelation: "bets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_commissions_broker_id_fkey"
+            columns: ["broker_id"]
+            isOneToOne: false
+            referencedRelation: "brokers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_commissions_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broker_payout_requests: {
+        Row: {
+          amount: number
+          broker_id: string
+          destination_reference: string | null
+          id: string
+          notes: string | null
+          paid_at: string | null
+          payment_reference: string | null
+          requested_at: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          broker_id: string
+          destination_reference?: string | null
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payment_reference?: string | null
+          requested_at?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          broker_id?: string
+          destination_reference?: string | null
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payment_reference?: string | null
+          requested_at?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_payout_requests_broker_id_fkey"
+            columns: ["broker_id"]
+            isOneToOne: false
+            referencedRelation: "brokers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_payout_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broker_players: {
+        Row: {
+          attributed_at: string
+          attribution_source: string
+          broker_id: string
+          id: string
+          is_active: boolean
+          player_id: string
+        }
+        Insert: {
+          attributed_at?: string
+          attribution_source?: string
+          broker_id: string
+          id?: string
+          is_active?: boolean
+          player_id: string
+        }
+        Update: {
+          attributed_at?: string
+          attribution_source?: string
+          broker_id?: string
+          id?: string
+          is_active?: boolean
+          player_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_players_broker_id_fkey"
+            columns: ["broker_id"]
+            isOneToOne: false
+            referencedRelation: "brokers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_players_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brokers: {
+        Row: {
+          broker_code: string
+          commission_bps: number
+          company_name: string
+          created_at: string
+          id: string
+          notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          settlement_model: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          broker_code: string
+          commission_bps?: number
+          company_name: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          settlement_model?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          broker_code?: string
+          commission_bps?: number
+          company_name?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          settlement_model?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brokers_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brokers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -348,7 +684,7 @@ export type Database = {
           cashout_percentage: number
           created_at?: string
           current_odds: number
-          expires_at?: string
+          expires_at: string
           id?: string
           is_available?: boolean
           offer_type: string
@@ -393,6 +729,235 @@ export type Database = {
             columns: ["wallet_transaction_id"]
             isOneToOne: false
             referencedRelation: "wallet_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crypto_deposit_invoices: {
+        Row: {
+          actually_paid: number
+          completed_at: string | null
+          created_at: string
+          expires_at: string | null
+          fiat_amount: number
+          fiat_currency: string
+          id: string
+          idempotency_key: string
+          pay_address: string | null
+          pay_amount: number | null
+          pay_currency: string
+          provider: string
+          provider_payload: Json
+          provider_payment_id: string | null
+          refunded_at: string | null
+          reversal_transaction_id: string | null
+          status: string
+          tx_hash: string | null
+          updated_at: string
+          user_id: string
+          wallet_transaction_id: string | null
+        }
+        Insert: {
+          actually_paid?: number
+          completed_at?: string | null
+          created_at?: string
+          expires_at?: string | null
+          fiat_amount: number
+          fiat_currency?: string
+          id?: string
+          idempotency_key: string
+          pay_address?: string | null
+          pay_amount?: number | null
+          pay_currency: string
+          provider?: string
+          provider_payload?: Json
+          provider_payment_id?: string | null
+          refunded_at?: string | null
+          reversal_transaction_id?: string | null
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string
+          user_id: string
+          wallet_transaction_id?: string | null
+        }
+        Update: {
+          actually_paid?: number
+          completed_at?: string | null
+          created_at?: string
+          expires_at?: string | null
+          fiat_amount?: number
+          fiat_currency?: string
+          id?: string
+          idempotency_key?: string
+          pay_address?: string | null
+          pay_amount?: number | null
+          pay_currency?: string
+          provider?: string
+          provider_payload?: Json
+          provider_payment_id?: string | null
+          refunded_at?: string | null
+          reversal_transaction_id?: string | null
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string
+          user_id?: string
+          wallet_transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crypto_deposit_invoices_reversal_transaction_id_fkey"
+            columns: ["reversal_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crypto_deposit_invoices_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crypto_deposit_invoices_wallet_transaction_id_fkey"
+            columns: ["wallet_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crypto_webhook_events: {
+        Row: {
+          event_key: string
+          id: string
+          payload: Json
+          payload_hash: string
+          payment_status: string
+          processed_at: string
+          provider: string
+          provider_payment_id: string
+          signature_verified: boolean
+        }
+        Insert: {
+          event_key: string
+          id?: string
+          payload: Json
+          payload_hash: string
+          payment_status: string
+          processed_at?: string
+          provider: string
+          provider_payment_id: string
+          signature_verified?: boolean
+        }
+        Update: {
+          event_key?: string
+          id?: string
+          payload?: Json
+          payload_hash?: string
+          payment_status?: string
+          processed_at?: string
+          provider?: string
+          provider_payment_id?: string
+          signature_verified?: boolean
+        }
+        Relationships: []
+      }
+      early_payout_awards: {
+        Row: {
+          bet_selection_id: string
+          created_at: string
+          event_id: string
+          id: string
+          match_minute: number
+          rule_id: string
+          score: string
+        }
+        Insert: {
+          bet_selection_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          match_minute: number
+          rule_id: string
+          score: string
+        }
+        Update: {
+          bet_selection_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          match_minute?: number
+          rule_id?: string
+          score?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "early_payout_awards_bet_selection_id_fkey"
+            columns: ["bet_selection_id"]
+            isOneToOne: true
+            referencedRelation: "bet_selections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "early_payout_awards_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "early_payout_awards_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "early_payout_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      early_payout_rules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_enabled: boolean
+          market_type: string
+          minimum_lead: number
+          minimum_minute: number
+          name: string
+          sport_slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          market_type?: string
+          minimum_lead: number
+          minimum_minute: number
+          name: string
+          sport_slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_enabled?: boolean
+          market_type?: string
+          minimum_lead?: number
+          minimum_minute?: number
+          name?: string
+          sport_slug?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "early_payout_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -456,62 +1021,125 @@ export type Database = {
           },
         ]
       }
+      event_timeline: {
+        Row: {
+          created_at: string
+          description: string | null
+          event_id: string
+          feed_update_id: string | null
+          id: string
+          incident_type: string
+          match_minute: number | null
+          provider_id: string | null
+          provider_incident_id: string | null
+          score_away: number | null
+          score_home: number | null
+          team_side: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          event_id: string
+          feed_update_id?: string | null
+          id?: string
+          incident_type: string
+          match_minute?: number | null
+          provider_id?: string | null
+          provider_incident_id?: string | null
+          score_away?: number | null
+          score_home?: number | null
+          team_side?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          event_id?: string
+          feed_update_id?: string | null
+          id?: string
+          incident_type?: string
+          match_minute?: number | null
+          provider_id?: string | null
+          provider_incident_id?: string | null
+          score_away?: number | null
+          score_home?: number | null
+          team_side?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_timeline_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_timeline_feed_update_id_fkey"
+            columns: ["feed_update_id"]
+            isOneToOne: false
+            referencedRelation: "feed_updates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           away_team: string
-          created_at: string
+          created_at: string | null
           home_team: string
           id: string
-          is_featured: boolean
+          is_featured: boolean | null
           is_suspended: boolean
           league_id: string | null
           live_minute: number | null
           live_score_away: number | null
           live_score_home: number | null
-          metadata: Json
+          metadata: Json | null
           provider_event_id: string | null
+          provider_id: string | null
           sport_id: string
           start_time: string
-          status: string
-          updated_at: string
+          status: string | null
+          updated_at: string | null
           venue: string | null
         }
         Insert: {
           away_team: string
-          created_at?: string
+          created_at?: string | null
           home_team: string
           id?: string
-          is_featured?: boolean
+          is_featured?: boolean | null
           is_suspended?: boolean
           league_id?: string | null
           live_minute?: number | null
           live_score_away?: number | null
           live_score_home?: number | null
-          metadata?: Json
+          metadata?: Json | null
           provider_event_id?: string | null
+          provider_id?: string | null
           sport_id: string
           start_time: string
-          status?: string
-          updated_at?: string
+          status?: string | null
+          updated_at?: string | null
           venue?: string | null
         }
         Update: {
           away_team?: string
-          created_at?: string
+          created_at?: string | null
           home_team?: string
           id?: string
-          is_featured?: boolean
+          is_featured?: boolean | null
           is_suspended?: boolean
           league_id?: string | null
           live_minute?: number | null
           live_score_away?: number | null
           live_score_home?: number | null
-          metadata?: Json
+          metadata?: Json | null
           provider_event_id?: string | null
+          provider_id?: string | null
           sport_id?: string
           start_time?: string
-          status?: string
-          updated_at?: string
+          status?: string | null
+          updated_at?: string | null
           venue?: string | null
         }
         Relationships: [
@@ -533,19 +1161,19 @@ export type Database = {
       }
       favorites: {
         Row: {
-          created_at: string
+          created_at: string | null
           event_id: string
           id: string
           user_id: string
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           event_id: string
           id?: string
           user_id: string
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           event_id?: string
           id?: string
           user_id?: string
@@ -604,12 +1232,12 @@ export type Database = {
       }
       fraud_flags: {
         Row: {
-          created_at: string
+          created_at: string | null
           description: string
           flag_type: string
           id: string
-          is_reviewed: boolean
-          metadata: Json
+          is_reviewed: boolean | null
+          metadata: Json | null
           resolution: string | null
           reviewed_at: string | null
           reviewed_by: string | null
@@ -617,12 +1245,12 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           description: string
           flag_type: string
           id?: string
-          is_reviewed?: boolean
-          metadata?: Json
+          is_reviewed?: boolean | null
+          metadata?: Json | null
           resolution?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -630,34 +1258,19 @@ export type Database = {
           user_id: string
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           description?: string
           flag_type?: string
           id?: string
-          is_reviewed?: boolean
-          metadata?: Json
+          is_reviewed?: boolean | null
+          metadata?: Json | null
           resolution?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           severity?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "fraud_flags_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "fraud_flags_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       idempotency_keys: {
         Row: {
@@ -674,8 +1287,8 @@ export type Database = {
           expires_at: string
           id?: string
           key: string
-          request_data?: Json
-          response_data?: Json
+          request_data: Json
+          response_data: Json
           user_id: string
         }
         Update: {
@@ -687,15 +1300,7 @@ export type Database = {
           response_data?: Json
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "idempotency_keys_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       kyc_documents: {
         Row: {
@@ -708,8 +1313,8 @@ export type Database = {
           reviewed_by: string | null
           risk_level: string
           source_of_funds_status: string
-          status: string
-          uploaded_at: string
+          status: string | null
+          uploaded_at: string | null
           user_id: string
         }
         Insert: {
@@ -722,8 +1327,8 @@ export type Database = {
           reviewed_by?: string | null
           risk_level?: string
           source_of_funds_status?: string
-          status?: string
-          uploaded_at?: string
+          status?: string | null
+          uploaded_at?: string | null
           user_id: string
         }
         Update: {
@@ -736,8 +1341,8 @@ export type Database = {
           reviewed_by?: string | null
           risk_level?: string
           source_of_funds_status?: string
-          status?: string
-          uploaded_at?: string
+          status?: string | null
+          uploaded_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -760,30 +1365,30 @@ export type Database = {
       leagues: {
         Row: {
           country: string | null
-          created_at: string
-          display_order: number
+          created_at: string | null
+          display_order: number | null
           id: string
-          is_active: boolean
+          is_active: boolean | null
           name: string
           slug: string
           sport_id: string
         }
         Insert: {
           country?: string | null
-          created_at?: string
-          display_order?: number
+          created_at?: string | null
+          display_order?: number | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           name: string
           slug: string
           sport_id: string
         }
         Update: {
           country?: string | null
-          created_at?: string
-          display_order?: number
+          created_at?: string | null
+          display_order?: number | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           name?: string
           slug?: string
           sport_id?: string
@@ -797,6 +1402,160 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ledger_accounts: {
+        Row: {
+          account_code: string
+          balance: number
+          created_at: string
+          currency: string
+          id: string
+          is_system: boolean
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          account_code: string
+          balance?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          is_system?: boolean
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          account_code?: string
+          balance?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          is_system?: boolean
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_accounts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ledger_journals: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          idempotency_key: string
+          metadata: Json
+          source_transaction_id: string | null
+          source_type: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          idempotency_key: string
+          metadata?: Json
+          source_transaction_id?: string | null
+          source_type: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          idempotency_key?: string
+          metadata?: Json
+          source_transaction_id?: string | null
+          source_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_journals_source_transaction_id_fkey"
+            columns: ["source_transaction_id"]
+            isOneToOne: true
+            referencedRelation: "wallet_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ledger_postings: {
+        Row: {
+          account_id: string
+          amount: number
+          balance_after: number
+          created_at: string
+          id: string
+          journal_id: string
+        }
+        Insert: {
+          account_id: string
+          amount: number
+          balance_after: number
+          created_at?: string
+          id?: string
+          journal_id: string
+        }
+        Update: {
+          account_id?: string
+          amount?: number
+          balance_after?: number
+          created_at?: string
+          id?: string
+          journal_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_postings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "ledger_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_postings_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: false
+            referencedRelation: "ledger_journals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      live_bet_config: {
+        Row: {
+          acceptance_delay_seconds: number
+          auto_suspend_events: string[] | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          sport: string
+          updated_at: string | null
+        }
+        Insert: {
+          acceptance_delay_seconds?: number
+          auto_suspend_events?: string[] | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          sport: string
+          updated_at?: string | null
+        }
+        Update: {
+          acceptance_delay_seconds?: number
+          auto_suspend_events?: string[] | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          sport?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       loyalty_accounts: {
         Row: {
@@ -826,6 +1585,172 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: true
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manual_deposit_requests: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          payment_method_id: string
+          proof_file_path: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          risk_score: number
+          status: string
+          transaction_reference: string
+          updated_at: string
+          user_id: string
+          user_note: string | null
+          wallet_transaction_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          payment_method_id: string
+          proof_file_path?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_score?: number
+          status?: string
+          transaction_reference: string
+          updated_at?: string
+          user_id: string
+          user_note?: string | null
+          wallet_transaction_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          payment_method_id?: string
+          proof_file_path?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_score?: number
+          status?: string
+          transaction_reference?: string
+          updated_at?: string
+          user_id?: string
+          user_note?: string | null
+          wallet_transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_deposit_requests_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_methods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_deposit_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_deposit_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_deposit_requests_wallet_transaction_id_fkey"
+            columns: ["wallet_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manual_withdrawal_requests: {
+        Row: {
+          amount: number
+          created_at: string
+          destination_reference: string
+          id: string
+          payment_method_id: string
+          payment_reference: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          risk_score: number
+          status: string
+          updated_at: string
+          user_id: string
+          user_note: string | null
+          wallet_transaction_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          destination_reference: string
+          id?: string
+          payment_method_id: string
+          payment_reference?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_score?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+          user_note?: string | null
+          wallet_transaction_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          destination_reference?: string
+          id?: string
+          payment_method_id?: string
+          payment_reference?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_score?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+          user_note?: string | null
+          wallet_transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_withdrawal_requests_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_methods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_withdrawal_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_withdrawal_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_withdrawal_requests_wallet_transaction_id_fkey"
+            columns: ["wallet_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -876,7 +1801,7 @@ export type Database = {
       }
       market_correlation_rules: {
         Row: {
-          adjustment_factor: number
+          adjustment_factor: number | null
           correlation_type: string
           created_at: string
           event_id: string | null
@@ -888,7 +1813,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          adjustment_factor?: number
+          adjustment_factor?: number | null
           correlation_type: string
           created_at?: string
           event_id?: string | null
@@ -900,7 +1825,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          adjustment_factor?: number
+          adjustment_factor?: number | null
           correlation_type?: string
           created_at?: string
           event_id?: string | null
@@ -919,46 +1844,32 @@ export type Database = {
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "market_correlation_rules_market_id_1_fkey"
-            columns: ["market_id_1"]
-            isOneToOne: false
-            referencedRelation: "markets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "market_correlation_rules_market_id_2_fkey"
-            columns: ["market_id_2"]
-            isOneToOne: false
-            referencedRelation: "markets"
-            referencedColumns: ["id"]
-          },
         ]
       }
       market_correlations: {
         Row: {
           correlation_type: string
-          created_at: string
+          created_at: string | null
           id: string
-          is_active: boolean
+          is_active: boolean | null
           market_type_1: string
           market_type_2: string
           rule_description: string | null
         }
         Insert: {
           correlation_type: string
-          created_at?: string
+          created_at?: string | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           market_type_1: string
           market_type_2: string
           rule_description?: string | null
         }
         Update: {
           correlation_type?: string
-          created_at?: string
+          created_at?: string | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           market_type_1?: string
           market_type_2?: string
           rule_description?: string | null
@@ -1020,36 +1931,36 @@ export type Database = {
       }
       markets: {
         Row: {
-          created_at: string
+          created_at: string | null
           event_id: string
           id: string
           line: number | null
           name: string
           result: string | null
           settled_at: string | null
-          status: string
+          status: string | null
           type: string
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           event_id: string
           id?: string
           line?: number | null
           name: string
           result?: string | null
           settled_at?: string | null
-          status?: string
+          status?: string | null
           type: string
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           event_id?: string
           id?: string
           line?: number | null
           name?: string
           result?: string | null
           settled_at?: string | null
-          status?: string
+          status?: string | null
           type?: string
         }
         Relationships: [
@@ -1087,7 +1998,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -1120,40 +2039,54 @@ export type Database = {
           type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       odds: {
         Row: {
-          created_at: string
+          created_at: string | null
           id: string
-          is_active: boolean
+          is_active: boolean | null
           is_locked: boolean
           last_provider_update: string | null
           market_id: string
+          provider_id: string | null
+          provider_odds: number | null
           selection: string
-          updated_at: string
+          updated_at: string | null
           value: number
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           is_locked?: boolean
           last_provider_update?: string | null
           market_id: string
+          provider_id?: string | null
+          provider_odds?: number | null
           selection: string
-          updated_at?: string
+          updated_at?: string | null
           value: number
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           is_locked?: boolean
           last_provider_update?: string | null
           market_id?: string
+          provider_id?: string | null
+          provider_odds?: number | null
           selection?: string
-          updated_at?: string
+          updated_at?: string | null
           value?: number
         }
         Relationships: [
@@ -1181,7 +2114,7 @@ export type Database = {
           selection: string
         }
         Insert: {
-          change_type?: string
+          change_type: string
           changed_by?: string | null
           created_at?: string
           id?: string
@@ -1230,6 +2163,84 @@ export type Database = {
           },
         ]
       }
+      payment_methods: {
+        Row: {
+          archived_at: string | null
+          code: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          destination_reference: string | null
+          display_order: number
+          id: string
+          instructions: string | null
+          is_enabled: boolean
+          max_amount: number
+          method_type: string
+          min_amount: number
+          name: string
+          network: string | null
+          provider_code: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          code: string
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          destination_reference?: string | null
+          display_order?: number
+          id?: string
+          instructions?: string | null
+          is_enabled?: boolean
+          max_amount?: number
+          method_type: string
+          min_amount?: number
+          name: string
+          network?: string | null
+          provider_code?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          destination_reference?: string | null
+          display_order?: number
+          id?: string
+          instructions?: string | null
+          is_enabled?: boolean
+          max_amount?: number
+          method_type?: string
+          min_amount?: number
+          name?: string
+          network?: string | null
+          provider_code?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_methods_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_methods_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           admin_role: string | null
@@ -1237,31 +2248,27 @@ export type Database = {
           country: string | null
           created_at: string | null
           date_of_birth: string | null
-          demo_balance: number
+          demo_balance: number | null
           deposit_limit: number | null
           display_currency: string
           email: string | null
           full_name: string | null
           id: string
           is_admin: boolean
-          is_self_excluded: boolean
           is_suspended: boolean
-          is_verified: boolean
-          kyc_status: string
-          kyc_verified_at: string | null
+          is_verified: boolean | null
+          kyc_status: string | null
           locale: string
           loss_limit: number | null
           odds_format: string
-          phone: string | null
           phone_number: string | null
           referral_code: string | null
           referred_by: string | null
           self_exclusion_until: string | null
           suspension_reason: string | null
           timezone: string
-          two_factor_enabled: boolean
+          two_factor_enabled: boolean | null
           updated_at: string | null
-          username: string | null
         }
         Insert: {
           admin_role?: string | null
@@ -1269,31 +2276,27 @@ export type Database = {
           country?: string | null
           created_at?: string | null
           date_of_birth?: string | null
-          demo_balance?: number
+          demo_balance?: number | null
           deposit_limit?: number | null
           display_currency?: string
           email?: string | null
           full_name?: string | null
           id: string
           is_admin?: boolean
-          is_self_excluded?: boolean
           is_suspended?: boolean
-          is_verified?: boolean
-          kyc_status?: string
-          kyc_verified_at?: string | null
+          is_verified?: boolean | null
+          kyc_status?: string | null
           locale?: string
           loss_limit?: number | null
           odds_format?: string
-          phone?: string | null
           phone_number?: string | null
           referral_code?: string | null
           referred_by?: string | null
           self_exclusion_until?: string | null
           suspension_reason?: string | null
           timezone?: string
-          two_factor_enabled?: boolean
+          two_factor_enabled?: boolean | null
           updated_at?: string | null
-          username?: string | null
         }
         Update: {
           admin_role?: string | null
@@ -1301,51 +2304,39 @@ export type Database = {
           country?: string | null
           created_at?: string | null
           date_of_birth?: string | null
-          demo_balance?: number
+          demo_balance?: number | null
           deposit_limit?: number | null
           display_currency?: string
           email?: string | null
           full_name?: string | null
           id?: string
           is_admin?: boolean
-          is_self_excluded?: boolean
           is_suspended?: boolean
-          is_verified?: boolean
-          kyc_status?: string
-          kyc_verified_at?: string | null
+          is_verified?: boolean | null
+          kyc_status?: string | null
           locale?: string
           loss_limit?: number | null
           odds_format?: string
-          phone?: string | null
           phone_number?: string | null
           referral_code?: string | null
           referred_by?: string | null
           self_exclusion_until?: string | null
           suspension_reason?: string | null
           timezone?: string
-          two_factor_enabled?: boolean
+          two_factor_enabled?: boolean | null
           updated_at?: string | null
-          username?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_referred_by_fkey"
-            columns: ["referred_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       promotions: {
         Row: {
           bonus_amount: number | null
           bonus_percentage: number | null
-          created_at: string
+          created_at: string | null
           description: string | null
           expires_after_days: number
           id: string
-          is_active: boolean
+          is_active: boolean | null
           loyalty_points_reward: number
           max_bonus: number | null
           min_deposit: number | null
@@ -1361,16 +2352,16 @@ export type Database = {
           updated_at: string
           valid_from: string
           valid_until: string
-          wagering_requirement: number
+          wagering_requirement: number | null
         }
         Insert: {
           bonus_amount?: number | null
           bonus_percentage?: number | null
-          created_at?: string
+          created_at?: string | null
           description?: string | null
           expires_after_days?: number
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           loyalty_points_reward?: number
           max_bonus?: number | null
           min_deposit?: number | null
@@ -1384,18 +2375,18 @@ export type Database = {
           total_claim_limit?: number | null
           type: string
           updated_at?: string
-          valid_from?: string
-          valid_until?: string
-          wagering_requirement?: number
+          valid_from: string
+          valid_until: string
+          wagering_requirement?: number | null
         }
         Update: {
           bonus_amount?: number | null
           bonus_percentage?: number | null
-          created_at?: string
+          created_at?: string | null
           description?: string | null
           expires_after_days?: number
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           loyalty_points_reward?: number
           max_bonus?: number | null
           min_deposit?: number | null
@@ -1411,7 +2402,7 @@ export type Database = {
           updated_at?: string
           valid_from?: string
           valid_until?: string
-          wagering_requirement?: number
+          wagering_requirement?: number | null
         }
         Relationships: []
       }
@@ -1449,96 +2440,135 @@ export type Database = {
       }
       provider_health: {
         Row: {
-          avg_latency_ms: number
-          consecutive_failures: number
+          avg_latency_ms: number | null
+          consecutive_failures: number | null
           error_message: string | null
-          failed_requests: number
+          failed_requests: number | null
           id: string
-          is_primary: boolean
+          is_primary: boolean | null
           last_failed_fetch: string | null
           last_successful_fetch: string | null
           provider_name: string
           provider_type: string
           status: string
-          success_rate: number
-          total_requests: number
-          updated_at: string
+          success_rate: number | null
+          total_requests: number | null
+          updated_at: string | null
         }
         Insert: {
-          avg_latency_ms?: number
-          consecutive_failures?: number
+          avg_latency_ms?: number | null
+          consecutive_failures?: number | null
           error_message?: string | null
-          failed_requests?: number
+          failed_requests?: number | null
           id?: string
-          is_primary?: boolean
+          is_primary?: boolean | null
           last_failed_fetch?: string | null
           last_successful_fetch?: string | null
           provider_name: string
           provider_type: string
           status?: string
-          success_rate?: number
-          total_requests?: number
-          updated_at?: string
+          success_rate?: number | null
+          total_requests?: number | null
+          updated_at?: string | null
         }
         Update: {
-          avg_latency_ms?: number
-          consecutive_failures?: number
+          avg_latency_ms?: number | null
+          consecutive_failures?: number | null
           error_message?: string | null
-          failed_requests?: number
+          failed_requests?: number | null
           id?: string
-          is_primary?: boolean
+          is_primary?: boolean | null
           last_failed_fetch?: string | null
           last_successful_fetch?: string | null
           provider_name?: string
           provider_type?: string
           status?: string
-          success_rate?: number
-          total_requests?: number
-          updated_at?: string
+          success_rate?: number | null
+          total_requests?: number | null
+          updated_at?: string | null
         }
         Relationships: []
       }
       responsible_gaming_limits: {
         Row: {
-          created_at: string
-          current_usage: number
+          created_at: string | null
+          current_usage: number | null
           id: string
-          is_active: boolean
+          is_active: boolean | null
           limit_type: string
           limit_value: number
           period_end: string
           period_start: string
-          updated_at: string
+          updated_at: string | null
           user_id: string
         }
         Insert: {
-          created_at?: string
-          current_usage?: number
+          created_at?: string | null
+          current_usage?: number | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           limit_type: string
           limit_value: number
           period_end: string
           period_start: string
-          updated_at?: string
+          updated_at?: string | null
           user_id: string
         }
         Update: {
-          created_at?: string
-          current_usage?: number
+          created_at?: string | null
+          current_usage?: number | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           limit_type?: string
           limit_value?: number
           period_end?: string
           period_start?: string
-          updated_at?: string
+          updated_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      risk_engine_config: {
+        Row: {
+          auto_suspend_percentage: number
+          id: boolean
+          max_event_liability: number
+          max_market_liability: number
+          max_single_payout: number
+          max_single_stake: number
+          unusual_stake_multiplier: number
+          updated_at: string
+          updated_by: string | null
+          velocity_bets_per_minute: number
+        }
+        Insert: {
+          auto_suspend_percentage?: number
+          id?: boolean
+          max_event_liability?: number
+          max_market_liability?: number
+          max_single_payout?: number
+          max_single_stake?: number
+          unusual_stake_multiplier?: number
+          updated_at?: string
+          updated_by?: string | null
+          velocity_bets_per_minute?: number
+        }
+        Update: {
+          auto_suspend_percentage?: number
+          id?: boolean
+          max_event_liability?: number
+          max_market_liability?: number
+          max_single_payout?: number
+          max_single_stake?: number
+          unusual_stake_multiplier?: number
+          updated_at?: string
+          updated_by?: string | null
+          velocity_bets_per_minute?: number
         }
         Relationships: [
           {
-            foreignKeyName: "responsible_gaming_limits_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "risk_engine_config_updated_by_fkey"
+            columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1628,41 +2658,84 @@ export type Database = {
       }
       self_exclusions: {
         Row: {
-          created_at: string
+          created_at: string | null
           end_date: string | null
           exclusion_type: string
           id: string
-          is_active: boolean
+          is_active: boolean | null
           reason: string | null
           start_date: string
           user_id: string
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           end_date?: string | null
           exclusion_type: string
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           reason?: string | null
           start_date?: string
           user_id: string
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           end_date?: string | null
           exclusion_type?: string
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           reason?: string | null
           start_date?: string
           user_id?: string
         }
+        Relationships: []
+      }
+      settlement_versions: {
+        Row: {
+          bet_id: string
+          created_at: string | null
+          id: string
+          previous_settlement_id: string | null
+          reason: string | null
+          settled_by: string
+          settlement_amount: number
+          settlement_type: string
+          version: number
+        }
+        Insert: {
+          bet_id: string
+          created_at?: string | null
+          id?: string
+          previous_settlement_id?: string | null
+          reason?: string | null
+          settled_by: string
+          settlement_amount: number
+          settlement_type: string
+          version?: number
+        }
+        Update: {
+          bet_id?: string
+          created_at?: string | null
+          id?: string
+          previous_settlement_id?: string | null
+          reason?: string | null
+          settled_by?: string
+          settlement_amount?: number
+          settlement_type?: string
+          version?: number
+        }
         Relationships: [
           {
-            foreignKeyName: "self_exclusions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
+            foreignKeyName: "settlement_versions_bet_id_fkey"
+            columns: ["bet_id"]
+            isOneToOne: false
+            referencedRelation: "bets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlement_versions_previous_settlement_id_fkey"
+            columns: ["previous_settlement_id"]
+            isOneToOne: false
+            referencedRelation: "settlements"
             referencedColumns: ["id"]
           },
         ]
@@ -1740,6 +2813,9 @@ export type Database = {
       }
       sport_config: {
         Row: {
+          auto_suspend_on_goal: boolean
+          auto_suspend_on_penalty: boolean
+          auto_suspend_on_red_card: boolean
           created_at: string
           default_margin: number
           id: string
@@ -1751,6 +2827,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_suspend_on_goal?: boolean
+          auto_suspend_on_penalty?: boolean
+          auto_suspend_on_red_card?: boolean
           created_at?: string
           default_margin?: number
           id?: string
@@ -1762,6 +2841,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_suspend_on_goal?: boolean
+          auto_suspend_on_penalty?: boolean
+          auto_suspend_on_red_card?: boolean
           created_at?: string
           default_margin?: number
           id?: string
@@ -1784,29 +2866,29 @@ export type Database = {
       }
       sports: {
         Row: {
-          created_at: string
-          display_order: number
+          created_at: string | null
+          display_order: number | null
           icon: string | null
           id: string
-          is_active: boolean
+          is_active: boolean | null
           name: string
           slug: string
         }
         Insert: {
-          created_at?: string
-          display_order?: number
+          created_at?: string | null
+          display_order?: number | null
           icon?: string | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           name: string
           slug: string
         }
         Update: {
-          created_at?: string
-          display_order?: number
+          created_at?: string | null
+          display_order?: number | null
           icon?: string | null
           id?: string
-          is_active?: boolean
+          is_active?: boolean | null
           name?: string
           slug?: string
         }
@@ -1880,82 +2962,130 @@ export type Database = {
           },
         ]
       }
-      support_ticket_messages: {
+      support_tickets: {
         Row: {
-          author_id: string
-          author_role: string
-          created_at: string
+          assigned_to: string | null
+          created_at: string | null
           id: string
-          is_internal: boolean
           message: string
-          ticket_id: string
+          priority: string | null
+          status: string | null
+          subject: string
+          updated_at: string | null
+          user_id: string
         }
         Insert: {
-          author_id: string
-          author_role: string
-          created_at?: string
+          assigned_to?: string | null
+          created_at?: string | null
           id?: string
-          is_internal?: boolean
           message: string
-          ticket_id: string
+          priority?: string | null
+          status?: string | null
+          subject: string
+          updated_at?: string | null
+          user_id: string
         }
         Update: {
-          author_id?: string
-          author_role?: string
-          created_at?: string
+          assigned_to?: string | null
+          created_at?: string | null
           id?: string
-          is_internal?: boolean
           message?: string
-          ticket_id?: string
+          priority?: string | null
+          status?: string | null
+          subject?: string
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "support_ticket_messages_ticket_id_fkey"
-            columns: ["ticket_id"]
+            foreignKeyName: "support_tickets_assigned_to_fkey"
+            columns: ["assigned_to"]
             isOneToOne: false
-            referencedRelation: "support_tickets"
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
       }
-      support_tickets: {
+      system_bet_line_selections: {
         Row: {
-          assigned_to: string | null
-          category: string
-          created_at: string
-          id: string
-          message: string
-          priority: string
-          status: string
-          subject: string
-          updated_at: string
-          user_id: string
+          bet_selection_id: string
+          line_id: string
         }
         Insert: {
-          assigned_to?: string | null
-          category?: string
-          created_at?: string
-          id?: string
-          message: string
-          priority?: string
-          status?: string
-          subject: string
-          updated_at?: string
-          user_id: string
+          bet_selection_id: string
+          line_id: string
         }
         Update: {
-          assigned_to?: string | null
-          category?: string
+          bet_selection_id?: string
+          line_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_bet_line_selections_bet_selection_id_fkey"
+            columns: ["bet_selection_id"]
+            isOneToOne: false
+            referencedRelation: "bet_selections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "system_bet_line_selections_line_id_fkey"
+            columns: ["line_id"]
+            isOneToOne: false
+            referencedRelation: "system_bet_lines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_bet_lines: {
+        Row: {
+          bet_id: string
+          combination_size: number
+          created_at: string
+          id: string
+          line_odds: number
+          line_stake: number
+          payout: number | null
+          potential_return: number
+          result: string
+        }
+        Insert: {
+          bet_id: string
+          combination_size: number
           created_at?: string
           id?: string
-          message?: string
-          priority?: string
-          status?: string
-          subject?: string
-          updated_at?: string
-          user_id?: string
+          line_odds: number
+          line_stake: number
+          payout?: number | null
+          potential_return: number
+          result?: string
         }
-        Relationships: []
+        Update: {
+          bet_id?: string
+          combination_size?: number
+          created_at?: string
+          id?: string
+          line_odds?: number
+          line_stake?: number
+          payout?: number | null
+          potential_return?: number
+          result?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_bet_lines_bet_id_fkey"
+            columns: ["bet_id"]
+            isOneToOne: false
+            referencedRelation: "bets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trader_actions: {
         Row: {
@@ -1965,7 +3095,7 @@ export type Database = {
           entity_id: string
           entity_type: string
           id: string
-          ip_address: string | null
+          ip_address: unknown
           new_value: Json | null
           previous_value: Json | null
           reason: string | null
@@ -1977,7 +3107,7 @@ export type Database = {
           entity_id: string
           entity_type: string
           id?: string
-          ip_address?: string | null
+          ip_address?: unknown
           new_value?: Json | null
           previous_value?: Json | null
           reason?: string | null
@@ -1989,7 +3119,7 @@ export type Database = {
           entity_id?: string
           entity_type?: string
           id?: string
-          ip_address?: string | null
+          ip_address?: unknown
           new_value?: Json | null
           previous_value?: Json | null
           reason?: string | null
@@ -2031,12 +3161,19 @@ export type Database = {
             referencedRelation: "announcements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "user_announcement_dismissals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_bonuses: {
         Row: {
           amount: number
-          awarded_at: string
+          awarded_at: string | null
           claim_source: string
           completed_at: string | null
           expires_at: string | null
@@ -2045,14 +3182,14 @@ export type Database = {
           last_wagered_at: string | null
           promotion_id: string | null
           remaining_amount: number
-          status: string
+          status: string | null
           user_id: string
-          wagering_completed: number
+          wagering_completed: number | null
           wagering_requirement: number
         }
         Insert: {
           amount: number
-          awarded_at?: string
+          awarded_at?: string | null
           claim_source?: string
           completed_at?: string | null
           expires_at?: string | null
@@ -2061,14 +3198,14 @@ export type Database = {
           last_wagered_at?: string | null
           promotion_id?: string | null
           remaining_amount?: number
-          status?: string
+          status?: string | null
           user_id: string
-          wagering_completed?: number
-          wagering_requirement?: number
+          wagering_completed?: number | null
+          wagering_requirement: number
         }
         Update: {
           amount?: number
-          awarded_at?: string
+          awarded_at?: string | null
           claim_source?: string
           completed_at?: string | null
           expires_at?: string | null
@@ -2077,9 +3214,9 @@ export type Database = {
           last_wagered_at?: string | null
           promotion_id?: string | null
           remaining_amount?: number
-          status?: string
+          status?: string | null
           user_id?: string
-          wagering_completed?: number
+          wagering_completed?: number | null
           wagering_requirement?: number
         }
         Relationships: [
@@ -2160,74 +3297,55 @@ export type Database = {
           },
         ]
       }
-      wallet_accounts: {
-        Row: {
-          balance: number
-          bonus_balance: number
-          created_at: string
-          currency: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          balance?: number
-          bonus_balance?: number
-          created_at?: string
-          currency?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          balance?: number
-          bonus_balance?: number
-          created_at?: string
-          currency?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       wallet_transactions: {
         Row: {
           amount: number
           balance_after: number
-          balance_before: number
-          created_at: string
+          balance_before: number | null
+          created_at: string | null
           description: string | null
           id: string
-          metadata: Json
+          metadata: Json | null
           reference_id: string | null
-          status: string
+          status: string | null
           type: string
           user_id: string
         }
         Insert: {
           amount: number
-          balance_after?: number
-          balance_before?: number
-          created_at?: string
+          balance_after: number
+          balance_before?: number | null
+          created_at?: string | null
           description?: string | null
           id?: string
-          metadata?: Json
+          metadata?: Json | null
           reference_id?: string | null
-          status?: string
+          status?: string | null
           type: string
           user_id: string
         }
         Update: {
           amount?: number
           balance_after?: number
-          balance_before?: number
-          created_at?: string
+          balance_before?: number | null
+          created_at?: string | null
           description?: string | null
           id?: string
-          metadata?: Json
+          metadata?: Json | null
           reference_id?: string | null
-          status?: string
+          status?: string | null
           type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "wallet_transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -2242,22 +3360,64 @@ export type Database = {
         }
         Returns: Json
       }
+      apply_crypto_deposit_update: {
+        Args: {
+          p_actually_paid: number
+          p_event_key: string
+          p_invoice_id: string
+          p_pay_amount: number
+          p_pay_currency: string
+          p_payload: Json
+          p_payload_hash: string
+          p_payment_status: string
+          p_price_amount: number
+          p_price_currency: string
+          p_provider: string
+          p_provider_payment_id: string
+          p_tx_hash: string
+        }
+        Returns: Json
+      }
+      apply_for_broker: { Args: { p_company_name: string }; Returns: Json }
+      archive_payment_method: { Args: { p_id: string }; Returns: undefined }
+      award_bonus: {
+        Args: {
+          p_amount: number
+          p_promotion_id: string
+          p_user_id: string
+          p_wagering_requirement: number
+        }
+        Returns: string
+      }
       cancel_bet_atomic: { Args: { p_bet_id: string }; Returns: Json }
       claim_promotion: {
         Args: { p_promo_code?: string; p_promotion_id: string }
         Returns: Json
       }
-      close_support_ticket: { Args: { p_ticket_id: string }; Returns: string }
-      create_support_ticket: {
-        Args: {
-          p_category?: string
-          p_message: string
-          p_priority?: string
-          p_subject: string
-        }
-        Returns: string
+      decide_admin_approval: {
+        Args: { p_approval_id: string; p_decision: string; p_note?: string }
+        Returns: undefined
+      }
+      delete_early_payout_rule: { Args: { p_id: string }; Returns: undefined }
+      ensure_user_ledger_accounts_from_id: {
+        Args: { p_cash_balance?: number; p_user_id: string }
+        Returns: undefined
       }
       expire_user_bonuses: { Args: { p_batch_size?: number }; Returns: Json }
+      finalize_manual_deposit_approval: {
+        Args: { p_admin: string; p_note: string; p_request_id: string }
+        Returns: undefined
+      }
+      finalize_manual_withdrawal_approval: {
+        Args: {
+          p_admin: string
+          p_note: string
+          p_payment_reference?: string
+          p_request_id: string
+        }
+        Returns: undefined
+      }
+      get_my_broker_dashboard: { Args: never; Returns: Json }
       get_my_wallet_balances: { Args: never; Returns: Json }
       get_wallet_reconciliation_report: {
         Args: never
@@ -2273,7 +3433,19 @@ export type Database = {
         Args: { p_payload: Json; p_update_id: string }
         Returns: Json
       }
+      is_aal2: { Args: never; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
+      is_service_role: { Args: never; Returns: boolean }
+      link_my_broker: { Args: { p_broker_code: string }; Returns: Json }
+      place_bet: {
+        Args: {
+          p_bet_type: string
+          p_selections: Json
+          p_stake: number
+          p_user_id: string
+        }
+        Returns: string
+      }
       place_bet_atomic: {
         Args: {
           p_bet_type: string
@@ -2292,6 +3464,10 @@ export type Database = {
         }
         Returns: Json
       }
+      process_early_payout_for_event: {
+        Args: { p_event_id: string }
+        Returns: number
+      }
       process_next_settlement_job: { Args: never; Returns: Json }
       record_event_result_and_queue: {
         Args: {
@@ -2304,8 +3480,78 @@ export type Database = {
         }
         Returns: string
       }
-      reply_support_ticket: {
-        Args: { p_message: string; p_ticket_id: string }
+      reject_manual_withdrawal: {
+        Args: { p_admin: string; p_note: string; p_request_id: string }
+        Returns: undefined
+      }
+      request_broker_payout: {
+        Args: { p_amount: number; p_destination_reference: string }
+        Returns: string
+      }
+      review_broker_application: {
+        Args: {
+          p_broker_id: string
+          p_commission_bps: number
+          p_notes?: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      review_broker_payout: {
+        Args: {
+          p_notes?: string
+          p_payment_reference?: string
+          p_request_id: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      review_kyc_document_manual: {
+        Args: {
+          p_action: string
+          p_document_id: string
+          p_note: string
+          p_risk_level?: string
+          p_source_of_funds_status?: string
+        }
+        Returns: undefined
+      }
+      review_manual_deposit_request: {
+        Args: { p_request_id: string; p_review_note?: string; p_status: string }
+        Returns: undefined
+      }
+      review_manual_withdrawal_request: {
+        Args: { p_request_id: string; p_review_note?: string; p_status: string }
+        Returns: undefined
+      }
+      save_early_payout_rule: {
+        Args: {
+          p_id: string
+          p_is_enabled: boolean
+          p_market_type: string
+          p_minimum_lead: number
+          p_minimum_minute: number
+          p_name: string
+          p_sport_slug: string
+        }
+        Returns: string
+      }
+      save_payment_method: {
+        Args: {
+          p_code: string
+          p_currency: string
+          p_destination_reference: string
+          p_display_order: number
+          p_id: string
+          p_instructions: string
+          p_is_enabled: boolean
+          p_max_amount: number
+          p_method_type: string
+          p_min_amount: number
+          p_name: string
+          p_network: string
+          p_provider_code: string
+        }
         Returns: string
       }
       set_my_responsible_limit: {
@@ -2323,6 +3569,43 @@ export type Database = {
           p_reason?: string
         }
         Returns: string
+      }
+      submit_manual_deposit_request: {
+        Args: {
+          p_amount: number
+          p_payment_method_id: string
+          p_proof_file_path?: string
+          p_transaction_reference: string
+          p_user_note?: string
+        }
+        Returns: string
+      }
+      submit_manual_withdrawal_request: {
+        Args: {
+          p_amount: number
+          p_destination_reference: string
+          p_payment_method_id: string
+          p_user_note?: string
+        }
+        Returns: string
+      }
+      transfer_user_bonus_funds: {
+        Args: {
+          p_bonus_id: string
+          p_destination: string
+          p_requested_amount: number
+          p_user_id: string
+        }
+        Returns: number
+      }
+      update_my_display_preferences: {
+        Args: {
+          p_currency: string
+          p_locale: string
+          p_odds_format: string
+          p_timezone: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
