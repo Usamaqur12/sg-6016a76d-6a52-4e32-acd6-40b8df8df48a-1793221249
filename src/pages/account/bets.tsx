@@ -82,7 +82,7 @@ export default function MyBets() {
 
     const [{ data: nextProfile }, walletResult] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", authUser.id).maybeSingle(),
-      supabase.rpc("get_user_wallet_balance" as any, { p_user_id: authUser.id }) as Promise<{ data: { cash_balance: number; bonus_balance: number } | null; error: any }>
+      (supabase.rpc("get_user_wallet_balance" as any, { p_user_id: authUser.id }) as unknown) as Promise<{ data: { cash_balance: number; bonus_balance: number } | null; error: any }>
     ]);
 
     setProfile(

@@ -113,7 +113,7 @@ export default function AdminUsers() {
       if (profiles) {
         // Get wallet balances using RPC for each user with type casting
         const walletPromises = profiles.map(p => 
-          supabase.rpc("get_user_wallet_balance" as any, { p_user_id: p.id }) as Promise<{ data: { cash_balance: number; bonus_balance: number } | null; error: any }>
+          (supabase.rpc("get_user_wallet_balance" as any, { p_user_id: p.id }) as unknown) as Promise<{ data: { cash_balance: number; bonus_balance: number } | null; error: any }>
         );
         const walletResults = await Promise.all(walletPromises);
         
