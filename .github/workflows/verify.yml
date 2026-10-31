@@ -1,0 +1,51 @@
+name: Verify production build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-main
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://build-test.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_build_test
+      SUPABASE_SECRET_KEY: sb_secret_build_test
+      NEXT_PUBLIC_DEMO_MODE: "false"
+      NEXT_PUBLIC_ENABLE_DEMO_BACKEND: "false"
+      PRODUCTION_MODE: "false"
+      ENFORCE_PRODUCTION_READINESS: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: UI action audit
+        run: npm run test:ui-actions
+
+      - name: Admin mutation boundary audit
+        run: npm run test:admin-boundaries
+
+      - name: Production build
+        run: npm run build
