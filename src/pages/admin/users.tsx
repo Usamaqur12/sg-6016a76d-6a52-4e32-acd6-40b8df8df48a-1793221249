@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Search, UserCheck, Ban, Mail, Phone, Calendar, Wallet, AlertTriangle } from "lucide-react";
+import { Search, UserCheck, UserPlus, Ban, Mail, Phone, Calendar, Wallet, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 interface User {
@@ -37,6 +37,11 @@ export default function AdminUsers() {
   const [creditReason, setCreditReason] = useState("");
   const [creditKey, setCreditKey] = useState("");
   const [crediting, setCrediting] = useState(false);
+  const [showAddUserDialog, setShowAddUserDialog] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [creatingUser, setCreatingUser] = useState(false);
 
   useEffect(() => {
     void loadUsers();
@@ -64,6 +69,50 @@ export default function AdminUsers() {
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "Admin request failed");
     return body;
+  }
+
+  async function createUser() {
+    const email = newUserEmail.trim().toLowerCase();
+    const fullName = newUserName.trim();
+
+    if (!email || newUserPassword.length < 12) {
+      toast({
+        title: "Validation error",
+        description: "Enter a valid email and a temporary password of at least 12 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCreatingUser(true);
+    try {
+      const body = await adminFetch("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password: newUserPassword,
+          fullName: fullName || undefined,
+        }),
+      });
+
+      toast({
+        title: "User created",
+        description: body.message || `${email} can now sign in with the temporary password.`,
+      });
+      setShowAddUserDialog(false);
+      setNewUserEmail("");
+      setNewUserName("");
+      setNewUserPassword("");
+      await loadUsers();
+    } catch (error) {
+      toast({
+        title: "User creation failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingUser(false);
+    }
   }
 
   function openBalanceCredit(user: User) {
@@ -223,9 +272,17 @@ export default function AdminUsers() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">User Management</h1>
-          <p className="text-sm text-muted-foreground">Search, view, and manage user accounts</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">User Management</h1>
+            <p className="text-sm text-muted-foreground">Search, create, view, and manage user accounts</p>
+          </div>
+          {["super_admin", "admin"].includes(currentAdminRole) && (
+            <Button onClick={() => setShowAddUserDialog(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add User
+            </Button>
+          )}
         </div>
 
         {/* Filters */}
@@ -376,6 +433,70 @@ export default function AdminUsers() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={showAddUserDialog}
+        onOpenChange={(open) => {
+          if (!creatingUser) setShowAddUserDialog(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add new user</DialogTitle>
+            <DialogDescription>
+              Create a customer login directly. New users start with a real balance of $0.00.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="new-user-name">Full name</Label>
+              <Input
+                id="new-user-name"
+                value={newUserName}
+                onChange={(event) => setNewUserName(event.target.value)}
+                maxLength={120}
+                placeholder="Customer name (optional)"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-user-email">Email</Label>
+              <Input
+                id="new-user-email"
+                type="email"
+                value={newUserEmail}
+                onChange={(event) => setNewUserEmail(event.target.value)}
+                maxLength={320}
+                autoComplete="off"
+                placeholder="customer@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-user-password">Temporary password</Label>
+              <Input
+                id="new-user-password"
+                type="password"
+                value={newUserPassword}
+                onChange={(event) => setNewUserPassword(event.target.value)}
+                minLength={12}
+                maxLength={128}
+                autoComplete="new-password"
+                placeholder="At least 12 characters"
+              />
+              <p className="text-xs text-muted-foreground">
+                Share this password securely. The account is created with confirmed email and zero balance.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddUserDialog(false)} disabled={creatingUser}>
+              Cancel
+            </Button>
+            <Button onClick={() => void createUser()} disabled={creatingUser}>
+              {creatingUser ? "Creating…" : "Create user"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(balanceUser)} onOpenChange={(open) => !open && !crediting && setBalanceUser(null)}>
         <DialogContent>
