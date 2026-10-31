@@ -4,8 +4,7 @@
 ALTER TABLE public.profiles
   ALTER COLUMN demo_balance SET DEFAULT 0.00;
 
-ALTER TABLE public.wallet_accounts
-  ALTER COLUMN balance SET DEFAULT 0.00;
+-- Note: ledger_accounts balance default is already 0.00, no change needed
 
 CREATE TEMP TABLE legacy_demo_balance_users ON COMMIT DROP AS
 SELECT p.id
@@ -44,12 +43,14 @@ SET demo_balance = 0.00,
 FROM legacy_demo_balance_users legacy
 WHERE p.id = legacy.id;
 
-UPDATE public.wallet_accounts wa
+-- Reset ledger_accounts balances for legacy demo users
+UPDATE public.ledger_accounts la
 SET balance = 0.00,
     updated_at = NOW()
 FROM legacy_demo_balance_users legacy
-WHERE wa.user_id = legacy.id
-  AND wa.balance = 10000.00;
+WHERE la.user_id = legacy.id
+  AND la.account_code IN ('cash', 'bonus')
+  AND la.balance = 10000.00;
 
 COMMENT ON COLUMN public.profiles.demo_balance IS
   'Legacy balance column retained for compatibility. New accounts always start at zero.';
