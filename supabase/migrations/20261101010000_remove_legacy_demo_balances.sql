@@ -1,9 +1,6 @@
 -- Remove the historical automatic $10,000 play-money grant.
 -- Only untouched legacy accounts are reset; accounts with any wallet activity are preserved.
 
--- Temporarily disable the system fields protection trigger
-ALTER TABLE public.profiles DISABLE TRIGGER protect_profile_system_fields;
-
 ALTER TABLE public.profiles
   ALTER COLUMN demo_balance SET DEFAULT 0.00;
 
@@ -54,9 +51,6 @@ FROM legacy_demo_balance_users legacy
 WHERE la.user_id = legacy.id
   AND la.account_code IN ('cash', 'bonus')
   AND la.balance = 10000.00;
-
--- Re-enable the system fields protection trigger
-ALTER TABLE public.profiles ENABLE TRIGGER protect_profile_system_fields;
 
 COMMENT ON COLUMN public.profiles.demo_balance IS
   'Legacy balance column retained for compatibility. New accounts always start at zero.';
