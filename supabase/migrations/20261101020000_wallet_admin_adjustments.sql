@@ -2,12 +2,45 @@
 
 ALTER TABLE public.profiles ALTER COLUMN demo_balance SET DEFAULT 0.00;
 
+-- Create admin_balance_adjustments table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.admin_balance_adjustments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  idempotency_key UUID NOT NULL UNIQUE,
+  admin_id UUID NOT NULL REFERENCES public.profiles(id),
+  user_id UUID NOT NULL REFERENCES public.profiles(id),
+  amount NUMERIC(15,2) NOT NULL,
+  reason TEXT NOT NULL,
+  balance_before NUMERIC(15,2) NOT NULL,
+  balance_after NUMERIC(15,2) NOT NULL,
+  wallet_transaction_id UUID REFERENCES public.wallet_transactions(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Enable RLS on admin_balance_adjustments
+ALTER TABLE public.admin_balance_adjustments ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies for admin_balance_adjustments
+CREATE POLICY "finance_read_balance_adjustments"
+  ON public.admin_balance_adjustments
+  FOR SELECT
+  TO authenticated
+  USING (has_admin_role(ARRAY['finance'::text]));
+
+CREATE POLICY "users_read_own_balance_adjustments"
+  ON public.admin_balance_adjustments
+  FOR SELECT
+  TO authenticated
+  USING (user_id = uid());
+
+-- Add amount constraint
 ALTER TABLE public.admin_balance_adjustments
   DROP CONSTRAINT IF EXISTS admin_balance_adjustments_amount_check;
 ALTER TABLE public.admin_balance_adjustments
   ADD CONSTRAINT admin_balance_adjustments_amount_check
   CHECK (amount BETWEEN -100000 AND 100000 AND amount <> 0);
 
+-- Clean up legacy demo balances in ledger_accounts
 DO $$
 DECLARE
   v_user RECORD;
@@ -81,6 +114,7 @@ BEGIN
 END;
 $$;
 
+-- Create admin balance adjustment function
 CREATE OR REPLACE FUNCTION public.admin_adjust_user_balance(
   p_user_id UUID,
   p_amount NUMERIC,
