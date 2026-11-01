@@ -32,6 +32,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { Shield, UserPlus, Trash2 } from "lucide-react";
 import { useRouter } from "next/router";
 
+const USERNAME_LOGIN_SUFFIX = "@users.primebet.test";
+
+function displayAdminLogin(value: string): { label: string; isUsername: boolean } {
+  if (value.toLowerCase().endsWith(USERNAME_LOGIN_SUFFIX)) {
+    return {
+      label: value.slice(0, -USERNAME_LOGIN_SUFFIX.length),
+      isUsername: true,
+    };
+  }
+  return { label: value, isUsername: false };
+}
+
 interface AdminUser {
   id: string;
   email: string;
@@ -103,7 +115,7 @@ export default function AdminUsersPage() {
     if (!newAdminEmail || !newAdminRole || newAdminPassword.length < 12) {
       toast({
         title: "Validation error",
-        description: "Email, role, and a temporary password of at least 12 characters are required",
+        description: "Email or username, role, and a temporary password of at least 12 characters are required",
         variant: "destructive",
       });
       return;
@@ -114,7 +126,7 @@ export default function AdminUsersPage() {
       const result = await adminFetch("/api/admin/admin-users", {
         method: "POST",
         body: JSON.stringify({
-          email: newAdminEmail.trim(),
+          identifier: newAdminEmail.trim(),
           password: newAdminPassword,
           role: newAdminRole,
         }),
@@ -218,7 +230,7 @@ export default function AdminUsersPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Email</TableHead>
+                <TableHead>Login</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Added</TableHead>
@@ -241,7 +253,14 @@ export default function AdminUsersPage() {
               ) : (
                 admins.map((admin) => (
                   <TableRow key={admin.id}>
-                    <TableCell className="font-medium">{admin.email}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <span>{displayAdminLogin(admin.email).label}</span>
+                        {displayAdminLogin(admin.email).isUsername && (
+                          <Badge variant="outline" className="text-[10px]">Username</Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Badge 
                         variant={
@@ -313,16 +332,17 @@ export default function AdminUsersPage() {
           <DialogHeader>
             <DialogTitle>Add New Admin</DialogTitle>
             <DialogDescription>
-              Create a new admin login directly, or promote an existing user with the same email.
+              Create a confirmed admin login directly. Email verification is not required.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="email">User Email</Label>
+              <Label htmlFor="email">Email or username</Label>
               <Input
                 id="email"
-                type="email"
-                placeholder="user@example.com"
+                type="text"
+                autoComplete="off"
+                placeholder="user@example.com or username"
                 value={newAdminEmail}
                 onChange={(e) => setNewAdminEmail(e.target.value)}
               />
@@ -340,7 +360,7 @@ export default function AdminUsersPage() {
                 onChange={(e) => setNewAdminPassword(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Share this securely. Existing registered users keep their current password.
+                Share this securely. The new admin can sign in immediately; no email verification is sent.
               </p>
             </div>
             <div className="space-y-2">
@@ -359,7 +379,7 @@ export default function AdminUsersPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                <strong>super_admin:</strong> Full platform access and admin management<br/>
+                <strong>Protected:</strong> Super Admin cannot be assigned from this form.<br/>
                 <strong>admin:</strong> Operational access; no admin management, audit, monitoring, providers, or readiness<br/>
                 <strong>finance:</strong> Payments, transactions, crypto<br/>
                 <strong>kyc:</strong> KYC verification<br/>
