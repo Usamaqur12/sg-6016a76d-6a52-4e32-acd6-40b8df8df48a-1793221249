@@ -3,10 +3,6 @@ import { useRouter } from "next/router";
 
 export default function RegisterRedirect() {
   const router = useRouter();
-
-  useEffect(() => {
-    router.replace("/auth/register");
-  }, [router]);
-
+  useEffect(() => { void router.replace("/auth/register"); }, [router]);
   return null;
 }
