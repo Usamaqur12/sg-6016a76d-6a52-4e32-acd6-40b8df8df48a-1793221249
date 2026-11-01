@@ -65,9 +65,6 @@ BEGIN
   SELECT * INTO v_profile FROM public.profiles WHERE id=v_user;
   IF NOT FOUND THEN RAISE EXCEPTION 'Customer account not found'; END IF;
   IF COALESCE(v_profile.is_admin,FALSE) THEN RETURN NEW; END IF;
-  IF COALESCE(v_profile.account_status,'active')<>'active' OR COALESCE(v_profile.is_suspended,FALSE) THEN
-    RAISE EXCEPTION 'Customer account is disabled';
-  END IF;
 
   v_operation:=CASE
     WHEN TG_TABLE_NAME='bets' THEN 'bet'
@@ -83,6 +80,9 @@ BEGIN
     ELSE 'system'
   END;
 
+  IF v_operation<>'system' AND (COALESCE(v_profile.account_status,'active')<>'active' OR COALESCE(v_profile.is_suspended,FALSE)) THEN
+    RAISE EXCEPTION 'Customer account is disabled';
+  END IF;
   IF v_operation IN ('bet','deposit','withdrawal') AND COALESCE(v_profile.wallet_frozen,FALSE) THEN
     RAISE EXCEPTION 'Customer wallet is frozen';
   END IF;

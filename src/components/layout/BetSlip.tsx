@@ -334,12 +334,12 @@ export function BetSlip() {
                 Please log in to place bets
               </p>
             )}
-            {profile && !hasVerifiedIdentifiers && (
+            {availableBalance !== null && !hasVerifiedIdentifiers && (
               <p className="text-[10px] text-center text-warning mt-2">
                 Preview selection—open Sports to choose a database-backed price.
               </p>
             )}
-            {profile && hasVerifiedIdentifiers && !hasValidBetShape && (
+            {availableBalance !== null && hasVerifiedIdentifiers && !hasValidBetShape && (
               <p className="text-[10px] text-center text-subtle-foreground mt-2">
                 {betType === "single" ? "Keep one selection for a single bet." : betType === "system" ? "System bets require at least 3 events." : "Multiple bets require at least two selections."}
               </p>
