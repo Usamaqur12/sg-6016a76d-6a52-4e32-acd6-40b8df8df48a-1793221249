@@ -25,6 +25,11 @@ interface User {
   total_deposits: number;
 }
 
+type ProfileRow = Pick<
+  User,
+  "id" | "email" | "full_name" | "kyc_status" | "is_suspended" | "account_status" | "created_at"
+>;
+
 export default function AdminUsers() {
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
@@ -160,11 +165,15 @@ export default function AdminUsers() {
   async function loadUsers() {
     try {
       // Get profiles with wallet and betting stats
-      const { data: profiles } = await supabase
+      // account_status is supplied by the customer-controls migration. The
+      // checked-in generated Supabase types may lag that runtime migration, so
+      // this query is narrowed explicitly until types are regenerated.
+      const { data: profileRows } = await (supabase as any)
         .from("profiles")
         .select("id, email, full_name, kyc_status, is_suspended, account_status, created_at")
         .eq("is_admin", false)
         .order("created_at", { ascending: false });
+      const profiles = (profileRows || []) as ProfileRow[];
 
       if (profiles) {
         // Get wallet balances using RPC for each user with type casting
