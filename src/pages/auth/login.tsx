@@ -44,6 +44,16 @@ export default function LoginPage() {
         throw new Error("Login failed - no user or session returned");
       }
 
+      const { data: account } = await (supabase as any)
+        .from("profiles")
+        .select("is_suspended,account_status")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (account?.is_suspended || account?.account_status === "closed") {
+        await supabase.auth.signOut();
+        throw new Error("This account is disabled. Contact support.");
+      }
+
       // Check MFA requirement
       const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       if (!assurance.error && assurance.data.currentLevel === "aal1" && assurance.data.nextLevel === "aal2") {

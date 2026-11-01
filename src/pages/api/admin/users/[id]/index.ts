@@ -16,21 +16,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userId = parsedId.data;
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("id,email,full_name,kyc_status,is_suspended,created_at,demo_balance,is_admin")
+      .select("id,email,full_name,kyc_status,is_suspended,created_at,is_admin,account_status,wallet_frozen,betting_disabled,deposits_disabled,withdrawals_disabled,account_deleted_at,control_reason")
       .eq("id", userId)
       .maybeSingle();
     if (profileError) throw profileError;
     if (!profile || profile.is_admin) return res.status(404).json({ error: "Customer not found" });
 
-    const [transactionsResult, betsResult, adjustmentsResult] = await Promise.all([
+    const [transactionsResult, betsResult, adjustmentsResult, walletResult] = await Promise.all([
       supabaseAdmin.from("wallet_transactions").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(25),
       supabaseAdmin.from("bets").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(25),
       supabaseAdmin.from("admin_balance_adjustments").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(25),
+      (supabaseAdmin as any).rpc("get_user_wallet_balance", { p_user_id: userId }),
     ]);
     if (transactionsResult.error) throw transactionsResult.error;
     if (betsResult.error) throw betsResult.error;
     return res.status(200).json({
       profile,
+      wallet: {
+        currency: "USD",
+        cash: Number((walletResult.data as any)?.cash_balance || 0),
+        bonus: Number((walletResult.data as any)?.bonus_balance || 0),
+        locked: Number((walletResult.data as any)?.locked_balance || 0),
+        available: Number((walletResult.data as any)?.cash_balance || 0) + Number((walletResult.data as any)?.bonus_balance || 0),
+      },
       transactions: transactionsResult.data || [],
       bets: betsResult.data || [],
       adjustments: adjustmentsResult.error ? [] : adjustmentsResult.data || [],

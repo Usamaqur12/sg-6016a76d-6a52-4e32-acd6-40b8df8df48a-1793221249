@@ -18,6 +18,7 @@ const ADMIN_ROUTE_ACCESS: Record<string, RouteRequirement> = {
   "/admin": "dashboard",
   "/admin/admin-users": "super_admin",
   "/admin/users": "users",
+  "/admin/users/[id]": "users",
   "/admin/kyc": "kyc",
   "/admin/bets": "bets",
   "/admin/sports": "sports",

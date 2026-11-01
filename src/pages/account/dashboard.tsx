@@ -15,6 +15,7 @@ import {
   FileCheck, AlertCircle, CheckCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getMyWalletBalances } from "@/services/walletService";
 
 interface BetStats {
   totalBets: number;
@@ -72,6 +73,7 @@ export default function Dashboard() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [recentBets, setRecentBets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [headerBalance, setHeaderBalance] = useState(0);
 
   useEffect(() => {
     void initialize();
@@ -95,6 +97,8 @@ export default function Dashboard() {
 
     if (profile) {
       setProfile(profile);
+      const walletResult = await getMyWalletBalances();
+      setHeaderBalance(Number(walletResult.balances?.available ?? walletResult.balances?.cash ?? 0));
       await Promise.all([
         loadBetStats(authUser.id),
         loadSportStats(authUser.id),
@@ -270,7 +274,7 @@ export default function Dashboard() {
       <Header
         user={user ? {
           email: profile?.email || user.email || "",
-          balance: profile?.demo_balance || 0,
+          balance: headerBalance,
         } : null}
         onAuthClick={() => router.push("/auth/login")}
       />

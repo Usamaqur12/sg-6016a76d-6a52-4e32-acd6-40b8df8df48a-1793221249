@@ -20,6 +20,7 @@ import Link from "next/link";
 import { defaultNotificationPreferences, getNotificationPreferences, saveNotificationPreferences, type NotificationPreferences } from "@/services/notificationsService";
 import { useToast } from "@/hooks/use-toast";
 import { SecuritySettings } from "@/components/account/SecuritySettings";
+import { getMyWalletBalances } from "@/services/walletService";
 
 function urlBase64ToUint8Array(value: string) {
   const padded = `${value}${"=".repeat((4 - value.length % 4) % 4)}`;
@@ -40,6 +41,7 @@ export default function Settings() {
   const [displayPreferences, setDisplayPreferences] = useState({ locale: "en", currency: "USD", timezone: "Asia/Karachi", oddsFormat: "decimal" });
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [headerBalance, setHeaderBalance] = useState(0);
 
   useEffect(() => {
     checkUser();
@@ -69,6 +71,8 @@ export default function Settings() {
       window.localStorage.setItem("primebet-locale", profileLocale);
       window.dispatchEvent(new CustomEvent("primebet:locale", { detail: profileLocale }));
       loadKYCDocuments(user.id);
+      const walletResult = await getMyWalletBalances();
+      setHeaderBalance(Number(walletResult.balances?.available ?? walletResult.balances?.cash ?? 0));
     }
     const preferenceResult = await getNotificationPreferences();
     setNotificationPreferences(preferenceResult.preferences);
@@ -203,7 +207,7 @@ export default function Settings() {
           profile
             ? {
                 email: user?.email || "",
-                balance: profile.demo_balance || 0,
+                balance: headerBalance,
               }
             : null
         }

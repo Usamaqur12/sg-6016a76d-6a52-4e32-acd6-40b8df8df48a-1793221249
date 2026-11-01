@@ -13,7 +13,7 @@ export function BetSlip() {
   const [stake, setStake] = useState("10");
   const [isPlacing, setIsPlacing] = useState(false);
   const [user, setUser] = useState<{ id: string } | null>(null);
-  const [profile, setProfile] = useState<{ demo_balance: number } | null>(null);
+  const [availableBalance, setAvailableBalance] = useState<number | null>(null);
   const [betType, setBetType] = useState<"single" | "multiple" | "system">("single");
   const [oddsAcceptance, setOddsAcceptance] = useState<OddsAcceptance>("none");
   const [oddsPreferenceLoaded, setOddsPreferenceLoaded] = useState(false);
@@ -32,7 +32,7 @@ export function BetSlip() {
       if (session?.user) {
         loadProfile(session.user.id);
       } else {
-        setProfile(null);
+        setAvailableBalance(null);
       }
     });
 
@@ -58,14 +58,16 @@ export function BetSlip() {
   }, [betSlip.bets.length, systemSize]);
 
   const loadProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
-    
-    if (data) {
-      setProfile(data);
+    const { data, error } = await (supabase.rpc("get_user_wallet_balance" as any, {
+      p_user_id: userId,
+    }) as unknown as Promise<{
+      data: { cash_balance: number; bonus_balance: number } | null;
+      error: unknown;
+    }>);
+    if (!error && data) {
+      setAvailableBalance(Number(data.cash_balance || 0) + Number(data.bonus_balance || 0));
+    } else {
+      setAvailableBalance(0);
     }
   };
 
@@ -74,8 +76,8 @@ export function BetSlip() {
   const systemQuote = systemBetPotentialReturn(betSlip.bets.map((bet) => bet.odds), systemSize, stakeAmount);
   const potentialWin = betType === "system" ? systemQuote.potentialReturn : stakeAmount * totalOdds;
   const potentialProfit = Math.max(potentialWin - stakeAmount, 0);
-  const availableBalance = Number(profile?.demo_balance || 0);
-  const stakeTooHigh = Boolean(profile && stakeAmount > availableBalance);
+  const spendableBalance = Number(availableBalance || 0);
+  const stakeTooHigh = availableBalance !== null && stakeAmount > spendableBalance;
   const hasVerifiedIdentifiers = betSlip.bets.every(
     (bet) => bet.eventId && bet.marketId && bet.oddsId
   );
@@ -135,15 +137,7 @@ export function BetSlip() {
         betSlip.clearBets();
         setStake("10");
         
-        const { data: updatedProfile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-
-        if (updatedProfile) {
-          setProfile(updatedProfile);
-        }
+        await loadProfile(user.id);
 
         alert(`✅ Bet placed successfully!\nBet ID: ${bet.id.substring(0, 8)}`);
       } else {
@@ -318,10 +312,10 @@ export function BetSlip() {
                 <span className="text-subtle-foreground">Potential Profit</span>
                 <span className="font-mono font-bold text-success">${potentialProfit.toFixed(2)}</span>
               </div>
-              {profile && (
+              {availableBalance !== null && (
                 <div className="flex items-center justify-between text-[10px]">
                   <span className="text-subtle-foreground">Available Balance</span>
-                  <span className="font-mono font-semibold">${availableBalance.toFixed(2)}</span>
+                  <span className="font-mono font-semibold">${spendableBalance.toFixed(2)}</span>
                 </div>
               )}
             </div>
@@ -329,13 +323,13 @@ export function BetSlip() {
             {/* Place Bet Button */}
             <button
               onClick={handlePlaceBet}
-              disabled={isPlacing || stakeAmount <= 0 || stakeTooHigh || !profile || !hasVerifiedIdentifiers || !hasValidBetShape}
+              disabled={isPlacing || stakeAmount <= 0 || stakeTooHigh || availableBalance === null || !hasVerifiedIdentifiers || !hasValidBetShape}
               className="w-full py-3 rounded bg-primary-bright hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed text-background text-sm font-black uppercase tracking-wide transition-all glow-green-bright"
             >
               {isPlacing ? "Placing..." : "Place Bet"}
             </button>
 
-            {!profile && (
+            {availableBalance === null && (
               <p className="text-[10px] text-center text-subtle-foreground mt-2">
                 Please log in to place bets
               </p>
