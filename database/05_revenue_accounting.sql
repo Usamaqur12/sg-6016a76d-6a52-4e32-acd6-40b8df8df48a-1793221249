@@ -28,6 +28,36 @@ CREATE TABLE IF NOT EXISTS public.finance_adjustments (
 CREATE INDEX IF NOT EXISTS finance_adjustments_occurred_idx
   ON public.finance_adjustments(occurred_at DESC, adjustment_type);
 
+
+CREATE TABLE IF NOT EXISTS public.partner_vertical_commissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  broker_id UUID NOT NULL REFERENCES public.brokers(id) ON DELETE RESTRICT,
+  player_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
+  source_type TEXT NOT NULL CHECK (source_type IN ('casino','aviator')),
+  source_id UUID NOT NULL,
+  gross_revenue NUMERIC(18,2) NOT NULL,
+  commission_bps INTEGER NOT NULL CHECK (commission_bps BETWEEN 0 AND 5000),
+  commission_amount NUMERIC(18,2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'accrued' CHECK (status IN ('accrued','void')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(broker_id,source_type,source_id)
+);
+CREATE INDEX IF NOT EXISTS partner_vertical_commissions_broker_idx
+  ON public.partner_vertical_commissions(broker_id,created_at DESC);
+ALTER TABLE public.partner_vertical_commissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS partner_reads_vertical_commissions ON public.partner_vertical_commissions;
+CREATE POLICY partner_reads_vertical_commissions ON public.partner_vertical_commissions
+  FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM public.brokers b
+    WHERE b.id=broker_id AND b.user_id=auth.uid()
+  ));
+DROP POLICY IF EXISTS finance_reads_vertical_commissions ON public.partner_vertical_commissions;
+CREATE POLICY finance_reads_vertical_commissions ON public.partner_vertical_commissions
+  FOR SELECT TO authenticated USING (public.has_admin_role(ARRAY['finance']));
+REVOKE INSERT,UPDATE,DELETE ON public.partner_vertical_commissions FROM PUBLIC,anon,authenticated;
+GRANT SELECT ON public.partner_vertical_commissions TO authenticated;
+
 ALTER TABLE public.casino_providers
   ADD COLUMN IF NOT EXISTS revenue_share_bps INTEGER NOT NULL DEFAULT 1500
     CHECK (revenue_share_bps BETWEEN 0 AND 10000),
@@ -160,6 +190,54 @@ BEGIN
 END;
 $$;
 
+
+CREATE OR REPLACE FUNCTION public.accrue_partner_casino_commission()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE v_broker public.brokers%ROWTYPE; v_ggr NUMERIC; v_commission NUMERIC;
+BEGIN
+  SELECT b.* INTO v_broker
+  FROM public.broker_players bp JOIN public.brokers b ON b.id=bp.broker_id
+  WHERE bp.player_id=NEW.user_id AND bp.is_active=TRUE AND b.status='active'
+  LIMIT 1;
+  IF NOT FOUND THEN RETURN NEW; END IF;
+  v_ggr:=CASE WHEN NEW.transaction_type='bet' THEN NEW.amount ELSE -NEW.amount END;
+  v_commission:=ROUND(v_ggr*v_broker.commission_bps/10000.0,2);
+  INSERT INTO public.partner_vertical_commissions(
+    broker_id,player_id,source_type,source_id,gross_revenue,commission_bps,commission_amount
+  ) VALUES(v_broker.id,NEW.user_id,'casino',NEW.id,v_ggr,v_broker.commission_bps,v_commission)
+  ON CONFLICT(broker_id,source_type,source_id) DO NOTHING;
+  RETURN NEW;
+END;
+$;
+DROP TRIGGER IF EXISTS accrue_partner_casino_commission_trigger ON public.casino_transactions;
+CREATE TRIGGER accrue_partner_casino_commission_trigger
+AFTER INSERT ON public.casino_transactions
+FOR EACH ROW EXECUTE FUNCTION public.accrue_partner_casino_commission();
+
+CREATE OR REPLACE FUNCTION public.accrue_partner_aviator_commission()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE v_broker public.brokers%ROWTYPE; v_ggr NUMERIC; v_commission NUMERIC;
+BEGIN
+  IF OLD.status<>'placed' OR NEW.status NOT IN ('cashed_out','lost','refunded') THEN RETURN NEW; END IF;
+  SELECT b.* INTO v_broker
+  FROM public.broker_players bp JOIN public.brokers b ON b.id=bp.broker_id
+  WHERE bp.player_id=NEW.user_id AND bp.is_active=TRUE AND b.status='active'
+  LIMIT 1;
+  IF NOT FOUND THEN RETURN NEW; END IF;
+  v_ggr:=CASE WHEN NEW.status='refunded' THEN 0 ELSE NEW.stake-COALESCE(NEW.payout,0) END;
+  v_commission:=ROUND(v_ggr*v_broker.commission_bps/10000.0,2);
+  INSERT INTO public.partner_vertical_commissions(
+    broker_id,player_id,source_type,source_id,gross_revenue,commission_bps,commission_amount
+  ) VALUES(v_broker.id,NEW.user_id,'aviator',NEW.id,v_ggr,v_broker.commission_bps,v_commission)
+  ON CONFLICT(broker_id,source_type,source_id) DO NOTHING;
+  RETURN NEW;
+END;
+$;
+DROP TRIGGER IF EXISTS accrue_partner_aviator_commission_trigger ON public.aviator_bets;
+CREATE TRIGGER accrue_partner_aviator_commission_trigger
+AFTER UPDATE OF status,payout ON public.aviator_bets
+FOR EACH ROW EXECUTE FUNCTION public.accrue_partner_aviator_commission();
+
 CREATE OR REPLACE FUNCTION public.get_finance_summary(
   p_period_from TIMESTAMPTZ,
   p_period_to TIMESTAMPTZ
@@ -210,10 +288,14 @@ BEGIN
   WHERE type='bonus_awarded' AND status='completed'
     AND created_at>=p_period_from AND created_at<p_period_to;
 
-  SELECT COALESCE(SUM(commission_amount),0) INTO v_partner_commission
-  FROM public.broker_commissions
-  WHERE status IN ('accrued','approved','paid')
-    AND created_at>=p_period_from AND created_at<p_period_to;
+  SELECT COALESCE(SUM(amount),0) INTO v_partner_commission FROM (
+    SELECT commission_amount AS amount FROM public.broker_commissions
+    WHERE status IN ('accrued','approved','paid')
+      AND created_at>=p_period_from AND created_at<p_period_to
+    UNION ALL
+    SELECT commission_amount AS amount FROM public.partner_vertical_commissions
+    WHERE status='accrued' AND created_at>=p_period_from AND created_at<p_period_to
+  ) partner_costs;
 
   SELECT COALESCE(SUM(amount),0) INTO v_deposits
   FROM public.wallet_transactions
@@ -295,6 +377,72 @@ BEGIN
   RETURN v_count;
 END;
 $;
+
+
+CREATE OR REPLACE FUNCTION public.get_my_broker_dashboard()
+RETURNS JSONB LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $
+  WITH mine AS (SELECT * FROM public.brokers WHERE user_id=auth.uid()),
+  all_commissions AS (
+    SELECT bc.broker_id,bc.gross_revenue,bc.commission_amount,bc.status
+    FROM public.broker_commissions bc JOIN mine m ON m.id=bc.broker_id
+    UNION ALL
+    SELECT vc.broker_id,vc.gross_revenue,vc.commission_amount,vc.status
+    FROM public.partner_vertical_commissions vc JOIN mine m ON m.id=vc.broker_id
+  ),
+  commission_totals AS (
+    SELECT COALESCE(SUM(gross_revenue) FILTER(WHERE status<>'void'),0) AS gross_revenue,
+      COALESCE(SUM(commission_amount) FILTER(WHERE status<>'void'),0) AS commission_earned
+    FROM all_commissions
+  ),
+  player_totals AS (
+    SELECT COUNT(*) FILTER(WHERE bp.is_active) AS players
+    FROM mine m LEFT JOIN public.broker_players bp ON bp.broker_id=m.id
+  ),
+  payout_totals AS (
+    SELECT COALESCE(SUM(pr.amount) FILTER(WHERE pr.status IN('pending','approved')),0) AS commission_reserved,
+      COALESCE(SUM(pr.amount) FILTER(WHERE pr.status='paid'),0) AS commission_paid
+    FROM mine m LEFT JOIN public.broker_payout_requests pr ON pr.broker_id=m.id
+  )
+  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM mine) THEN NULL ELSE jsonb_build_object(
+    'id',(SELECT id FROM mine),'companyName',(SELECT company_name FROM mine),
+    'brokerCode',(SELECT broker_code FROM mine),'status',(SELECT status FROM mine),
+    'commissionBps',(SELECT commission_bps FROM mine),'players',player_totals.players,
+    'grossRevenue',commission_totals.gross_revenue,
+    'commissionAvailable',GREATEST(commission_totals.commission_earned-payout_totals.commission_reserved-payout_totals.commission_paid,0),
+    'commissionReserved',payout_totals.commission_reserved,'commissionPaid',payout_totals.commission_paid
+  ) END FROM commission_totals,player_totals,payout_totals;
+$;
+
+CREATE OR REPLACE FUNCTION public.request_broker_payout(p_amount NUMERIC,p_destination_reference TEXT)
+RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE v_user UUID:=auth.uid(); v_broker public.brokers%ROWTYPE; v_earned NUMERIC; v_committed NUMERIC; v_id UUID;
+BEGIN
+  SELECT * INTO v_broker FROM public.brokers WHERE user_id=v_user AND status='active' FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Active partner account required'; END IF;
+  IF p_amount<100 THEN RAISE EXCEPTION 'Minimum partner payout is 100'; END IF;
+  IF length(trim(COALESCE(p_destination_reference,'')))<3 THEN RAISE EXCEPTION 'Approved payout destination is required'; END IF;
+  SELECT COALESCE(SUM(amount),0) INTO v_earned FROM (
+    SELECT commission_amount AS amount FROM public.broker_commissions
+      WHERE broker_id=v_broker.id AND status IN('accrued','approved','paid')
+    UNION ALL
+    SELECT commission_amount AS amount FROM public.partner_vertical_commissions
+      WHERE broker_id=v_broker.id AND status='accrued'
+  ) earned;
+  SELECT COALESCE(SUM(amount),0) INTO v_committed
+  FROM public.broker_payout_requests WHERE broker_id=v_broker.id AND status IN('pending','approved','paid');
+  IF p_amount>v_earned-v_committed THEN RAISE EXCEPTION 'Payout amount exceeds available commission'; END IF;
+  INSERT INTO public.broker_payout_requests(broker_id,amount,destination_reference)
+  VALUES(v_broker.id,p_amount,trim(p_destination_reference)) RETURNING id INTO v_id;
+  RETURN v_id;
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.accrue_partner_casino_commission() FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.accrue_partner_aviator_commission() FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.get_my_broker_dashboard() FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.get_my_broker_dashboard() TO authenticated;
+REVOKE ALL ON FUNCTION public.request_broker_payout(NUMERIC,TEXT) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.request_broker_payout(NUMERIC,TEXT) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.apply_configured_sport_margin() FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.reprice_sport_odds(UUID) FROM PUBLIC,anon;
