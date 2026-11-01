@@ -201,10 +201,7 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
           <div className="text-sm text-center text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/auth/register" className="text-primary hover:underline font-medium">
-              Sign up
-            </Link>
+            New accounts are created by an administrator.
           </div>
           <Link href="/" className="text-sm text-center text-muted-foreground hover:text-foreground">
             Back to Home
