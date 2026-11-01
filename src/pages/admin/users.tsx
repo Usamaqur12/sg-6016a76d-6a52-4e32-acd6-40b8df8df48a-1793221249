@@ -18,6 +18,7 @@ interface User {
   full_name: string | null;
   kyc_status: string;
   is_suspended: boolean;
+  account_status: "active" | "closed";
   created_at: string;
   wallet_balance: number;
   total_bets: number;
@@ -29,7 +30,7 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("open");
   const [kycFilter, setKycFilter] = useState("all");
   const [currentAdminRole, setCurrentAdminRole] = useState("");
   const [balanceUser, setBalanceUser] = useState<User | null>(null);
@@ -161,7 +162,7 @@ export default function AdminUsers() {
       // Get profiles with wallet and betting stats
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, email, full_name, kyc_status, is_suspended, created_at")
+        .select("id, email, full_name, kyc_status, is_suspended, account_status, created_at")
         .eq("is_admin", false)
         .order("created_at", { ascending: false });
 
@@ -209,6 +210,7 @@ export default function AdminUsers() {
           full_name: p.full_name,
           kyc_status: p.kyc_status || "not_submitted",
           is_suspended: p.is_suspended || false,
+          account_status: p.account_status === "closed" ? "closed" : "active",
           created_at: p.created_at,
           wallet_balance: walletMap.get(p.id) || 0,
           total_bets: betCountMap.get(p.id) || 0,
@@ -252,8 +254,10 @@ export default function AdminUsers() {
   }
 
   const filtered = users.filter(user => {
-    if (statusFilter === "active" && user.is_suspended) return false;
-    if (statusFilter === "suspended" && !user.is_suspended) return false;
+    if (statusFilter === "open" && user.account_status === "closed") return false;
+    if (statusFilter === "active" && (user.account_status === "closed" || user.is_suspended)) return false;
+    if (statusFilter === "suspended" && (user.account_status === "closed" || !user.is_suspended)) return false;
+    if (statusFilter === "archived" && user.account_status !== "closed") return false;
     if (kycFilter !== "all" && user.kyc_status !== kycFilter) return false;
     
     const needle = search.toLowerCase();
@@ -309,9 +313,11 @@ export default function AdminUsers() {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="open">Open accounts</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
                   <SelectItem value="suspended">Suspended</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                  <SelectItem value="all">All including archived</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={kycFilter} onValueChange={setKycFilter}>
@@ -334,31 +340,31 @@ export default function AdminUsers() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card className="surface">
             <CardContent className="p-4">
-              <div className="text-sm text-muted-foreground">Total Users</div>
-              <div className="text-2xl font-bold">{users.length}</div>
+              <div className="text-sm text-muted-foreground">Open Users</div>
+              <div className="text-2xl font-bold">{users.filter(u => u.account_status !== "closed").length}</div>
             </CardContent>
           </Card>
           <Card className="surface">
             <CardContent className="p-4">
               <div className="text-sm text-muted-foreground">Active</div>
               <div className="text-2xl font-bold text-success">
-                {users.filter(u => !u.is_suspended).length}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="surface">
-            <CardContent className="p-4">
-              <div className="text-sm text-muted-foreground">KYC Verified</div>
-              <div className="text-2xl font-bold text-primary">
-                {users.filter(u => u.kyc_status === "approved").length}
+                {users.filter(u => u.account_status !== "closed" && !u.is_suspended).length}
               </div>
             </CardContent>
           </Card>
           <Card className="surface">
             <CardContent className="p-4">
               <div className="text-sm text-muted-foreground">Suspended</div>
+              <div className="text-2xl font-bold text-warning">
+                {users.filter(u => u.account_status !== "closed" && u.is_suspended).length}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="surface">
+            <CardContent className="p-4">
+              <div className="text-sm text-muted-foreground">Archived</div>
               <div className="text-2xl font-bold text-danger">
-                {users.filter(u => u.is_suspended).length}
+                {users.filter(u => u.account_status === "closed").length}
               </div>
             </CardContent>
           </Card>
@@ -394,12 +400,14 @@ export default function AdminUsers() {
                             <div className="text-sm text-muted-foreground">{user.full_name}</div>
                           )}
                         </div>
-                        {user.is_suspended && (
+                        {user.account_status === "closed" ? (
+                          <Badge variant="secondary" className="ml-2">Archived</Badge>
+                        ) : user.is_suspended ? (
                           <Badge variant="destructive" className="ml-2">
                             <Ban className="h-3 w-3 mr-1" />
                             Suspended
                           </Badge>
-                        )}
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
@@ -421,13 +429,15 @@ export default function AdminUsers() {
                           <Wallet className="mr-1 h-4 w-4" /> Adjust Balance
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant={user.is_suspended ? "outline" : "destructive"}
-                        onClick={() => toggleSuspension(user.id, user.is_suspended)}
-                      >
-                        {user.is_suspended ? "Unsuspend" : "Suspend"}
-                      </Button>
+                      {user.account_status !== "closed" && (
+                        <Button
+                          size="sm"
+                          variant={user.is_suspended ? "outline" : "destructive"}
+                          onClick={() => toggleSuspension(user.id, user.is_suspended)}
+                        >
+                          {user.is_suspended ? "Unsuspend" : "Suspend"}
+                        </Button>
+                      )}
                       <Link href={`/admin/users/${user.id}`}>
                         <Button size="sm" variant="outline">View Details</Button>
                       </Link>
