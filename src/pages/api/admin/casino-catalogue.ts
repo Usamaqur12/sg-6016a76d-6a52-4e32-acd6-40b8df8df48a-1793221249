@@ -8,6 +8,7 @@ const createProviderSchema = z.object({
   resource: z.literal("provider"),
   code: z.string().trim().regex(/^[a-z0-9][a-z0-9_-]{1,79}$/),
   name: z.string().trim().min(2).max(160),
+  revenue_share_bps: z.number().int().min(0).max(10000).optional().default(1500),
 });
 const createGameSchema = z.object({
   resource: z.literal("game"), provider_id: z.string().uuid(),
@@ -55,6 +56,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "PATCH") {
+      const providerSettings = z.object({
+        resource: z.literal("provider_settings"),
+        id: z.string().uuid(),
+        revenueShareBps: z.number().int().min(0).max(10000),
+      }).safeParse(req.body);
+      if (providerSettings.success) {
+        const { error } = await supabaseAdmin.from("casino_providers").update({
+          revenue_share_bps: providerSettings.data.revenueShareBps,
+          updated_at: new Date().toISOString(),
+        }).eq("id", providerSettings.data.id);
+        if (error) throw error;
+        await writeAudit(auth.userId, "casino_provider_share_updated", "casino_provider", providerSettings.data.id, {
+          revenue_share_bps: providerSettings.data.revenueShareBps,
+        });
+        return res.status(200).json({ success: true });
+      }
+
       const parsed = z.object({ resource: z.enum(["provider", "game"]), id: z.string().uuid(), enabled: z.boolean() }).safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Valid catalogue update is required" });
       if (parsed.data.resource === "provider" && parsed.data.enabled) {
