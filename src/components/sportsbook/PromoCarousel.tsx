@@ -7,10 +7,10 @@ import Link from "next/link";
 const promos = [
   {
     id: 1,
-    title: "Welcome Bonus",
-    subtitle: "Get started with exclusive welcome offers and promotions!",
-    cta: "Get Started",
-    href: "/auth/register",
+    title: "Member Access",
+    subtitle: "Log in to view your account, wallet and available promotions.",
+    cta: "Log In",
+    href: "/auth/login",
     gradient: "from-primary/15 via-primary/5 to-transparent",
   },
   {
