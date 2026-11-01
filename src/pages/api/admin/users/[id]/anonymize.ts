@@ -76,7 +76,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: documents, error: documentsError } = await admin.from("kyc_documents")
       .select("id,file_url").eq("user_id", userId);
     if (documentsError) warnings.push("KYC records could not be inspected");
-    const storagePaths = (documents || []).map((row: { file_url?: string }) => row.file_url).filter(Boolean);
+    const storagePaths = (documents || [])
+      .map((row: { file_url?: string }) => row.file_url)
+      .filter((path: string | undefined): path is string => typeof path === "string" && path.length > 0);
     if (storagePaths.length) {
       const { error } = await supabaseAdmin.storage.from("kyc-documents").remove(storagePaths);
       if (error) warnings.push("One or more KYC files could not be removed from storage");
