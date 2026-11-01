@@ -20,18 +20,26 @@ CREATE TABLE IF NOT EXISTS public.admin_balance_adjustments (
 -- Enable RLS on admin_balance_adjustments
 ALTER TABLE public.admin_balance_adjustments ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies for admin_balance_adjustments
+-- Create RLS policies for admin_balance_adjustments using direct auth predicates
+-- Finance admins can read all adjustments
 CREATE POLICY "finance_read_balance_adjustments"
   ON public.admin_balance_adjustments
   FOR SELECT
   TO authenticated
-  USING (has_admin_role(ARRAY['finance'::text]));
+  USING (
+    auth.uid() IN (
+      SELECT id FROM public.profiles 
+      WHERE is_admin = TRUE 
+      AND admin_role IN ('super_admin', 'admin', 'finance')
+    )
+  );
 
+-- Users can read their own adjustments
 CREATE POLICY "users_read_own_balance_adjustments"
   ON public.admin_balance_adjustments
   FOR SELECT
   TO authenticated
-  USING (user_id = uid());
+  USING (user_id = auth.uid());
 
 -- Add amount constraint
 ALTER TABLE public.admin_balance_adjustments
