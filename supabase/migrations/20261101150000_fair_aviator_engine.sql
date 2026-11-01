@@ -117,12 +117,12 @@ BEGIN
     RETURN v_round.id;
   END IF;
 
-  IF FOUND AND v_round.status='betting' AND v_now>=v_round.betting_closes_at THEN
+  IF v_round.id IS NOT NULL AND v_round.status='betting' AND v_now>=v_round.betting_closes_at THEN
     UPDATE public.aviator_rounds SET status='running' WHERE id=v_round.id;
     v_round.status:='running';
   END IF;
 
-  IF FOUND AND v_round.status='running' AND v_now>=v_round.crashed_at THEN
+  IF v_round.id IS NOT NULL AND v_round.status='running' AND v_now>=v_round.crashed_at THEN
     UPDATE public.aviator_rounds
     SET status='crashed',server_seed_reveal=server_seed_secret
     WHERE id=v_round.id;
@@ -133,7 +133,7 @@ BEGIN
     v_round.server_seed_reveal:=v_round.server_seed_secret;
   END IF;
 
-  IF FOUND AND (
+  IF v_round.id IS NOT NULL AND (
     v_round.status IN ('betting','running')
     OR (v_round.status='crashed' AND v_now<v_round.next_round_at)
   ) THEN
