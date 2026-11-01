@@ -43,6 +43,10 @@ export default function LoginPage() {
       if (!user || !session) {
         throw new Error("Login failed - no user or session returned");
       }
+      if (!user.email_confirmed_at) {
+        await supabase.auth.signOut();
+        throw new Error("Verify your email before logging in.");
+      }
 
       const { data: account } = await (supabase as any)
         .from("profiles")
