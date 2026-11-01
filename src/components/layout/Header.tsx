@@ -48,6 +48,7 @@ export function Header({ user, onAuthClick }: HeaderProps) {
     { label: t("sports"), href: "/sports" },
     { label: t("live"), href: "/live" },
     { label: t("casino"), href: "/casino" },
+    { label: "Aviator", href: "/aviator" },
     { label: t("esports"), href: "/esports" },
     { label: t("promotions"), href: "/promotions" },
     { label: t("rewards"), href: "/rewards" },
