@@ -195,9 +195,7 @@ export function Header({ user, onAuthClick }: HeaderProps) {
                 <Button variant="ghost" size="sm" onClick={onAuthClick} className="h-7 px-3 text-xs font-semibold">
                   {t("login")}
                 </Button>
-                <Button asChild size="sm">
-                  <Link href="/register">Register</Link>
-                </Button>
+                <span className="hidden text-[11px] text-muted-foreground sm:inline">Invite-only access</span>
               </>
             )}
           </div>
