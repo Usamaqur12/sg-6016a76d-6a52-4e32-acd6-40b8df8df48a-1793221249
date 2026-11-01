@@ -15,7 +15,7 @@ export default function AdminCasino() {
   const { toast } = useToast();
   const [providers, setProviders] = useState<any[]>([]);
   const [games, setGames] = useState<any[]>([]);
-  const [providerForm, setProviderForm] = useState({ code: "", name: "" });
+  const [providerForm, setProviderForm] = useState({ code: "", name: "", revenueShare: "15" });
   const [gameForm, setGameForm] = useState({ provider_id: "", external_game_id: "", name: "", category: "slots" });
 
   async function adminFetch(url: string, init?: RequestInit) {
@@ -44,9 +44,32 @@ export default function AdminCasino() {
     const code = providerForm.code.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
     if (!code || !providerForm.name.trim()) return;
     try {
-      await adminFetch("/api/admin/casino-catalogue", { method: "POST", body: JSON.stringify({ resource: "provider", code, name: providerForm.name.trim() }) });
-      setProviderForm({ code: "", name: "" }); await load();
+      await adminFetch("/api/admin/casino-catalogue", { method: "POST", body: JSON.stringify({
+        resource: "provider", code, name: providerForm.name.trim(),
+        revenue_share_bps: Math.round(Number(providerForm.revenueShare || 0) * 100),
+      }) });
+      setProviderForm({ code: "", name: "", revenueShare: "15" }); await load();
     } catch (error) { toast({ title: "Provider was not added", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" }); }
+  }
+
+  async function updateProviderShare(id: string, currentBps: number) {
+    const value = window.prompt("Provider revenue share percentage (0-100)", String(Number(currentBps || 0) / 100));
+    if (value === null) return;
+    const percentage = Number(value);
+    if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+      toast({ title: "Revenue share must be between 0% and 100%", variant: "destructive" });
+      return;
+    }
+    try {
+      await adminFetch("/api/admin/casino-catalogue", {
+        method: "PATCH",
+        body: JSON.stringify({ resource: "provider_settings", id, revenueShareBps: Math.round(percentage * 100) }),
+      });
+      toast({ title: "Provider revenue share updated" });
+      await load();
+    } catch (error) {
+      toast({ title: "Revenue share was not updated", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
+    }
   }
 
   async function addGame() {
@@ -77,6 +100,7 @@ export default function AdminCasino() {
       <Card><CardHeader><CardTitle>Add provider</CardTitle></CardHeader><CardContent className="space-y-4">
         <div><Label>Provider code</Label><Input value={providerForm.code} onChange={(event) => setProviderForm({ ...providerForm, code: event.target.value })} placeholder="licensed-aggregator" /></div>
         <div><Label>Display name</Label><Input value={providerForm.name} onChange={(event) => setProviderForm({ ...providerForm, name: event.target.value })} placeholder="Provider name" /></div>
+        <div><Label>Revenue share %</Label><Input type="number" min="0" max="100" step="0.25" value={providerForm.revenueShare} onChange={(event) => setProviderForm({ ...providerForm, revenueShare: event.target.value })} /></div>
         <Button onClick={() => void addProvider()}>Add disabled provider</Button>
       </CardContent></Card>
       <Card><CardHeader><CardTitle>Add game</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">
@@ -87,7 +111,7 @@ export default function AdminCasino() {
         <Button className="md:col-span-2" onClick={() => void addGame()}>Add disabled game</Button>
       </CardContent></Card>
     </div>
-    <Card><CardHeader><CardTitle>Providers</CardTitle></CardHeader><CardContent className="space-y-3">{providers.map((provider) => <div key={provider.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"><div><div className="flex items-center gap-2"><span className="font-semibold">{provider.name}</span><Badge variant="outline">{provider.code}</Badge>{provider.is_demo && <Badge variant="secondary">demo</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">Status: {provider.status}</p></div><div className="flex items-center gap-2"><span className="text-sm">Enabled</span><Switch checked={Boolean(provider.is_enabled)} onCheckedChange={(value) => void toggle("casino_providers", provider.id, value)}/></div></div>)}{providers.length === 0 && <p className="text-sm text-muted-foreground">No providers configured.</p>}</CardContent></Card>
+    <Card><CardHeader><CardTitle>Providers</CardTitle></CardHeader><CardContent className="space-y-3">{providers.map((provider) => <div key={provider.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"><div><div className="flex items-center gap-2"><span className="font-semibold">{provider.name}</span><Badge variant="outline">{provider.code}</Badge>{provider.is_demo && <Badge variant="secondary">demo</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">Status: {provider.status} · Revenue share: {(Number(provider.revenue_share_bps || 0) / 100).toFixed(2)}%</p></div><div className="flex items-center gap-2"><Button size="sm" variant="outline" onClick={() => void updateProviderShare(provider.id, provider.revenue_share_bps)}>Edit share</Button><span className="text-sm">Enabled</span><Switch checked={Boolean(provider.is_enabled)} onCheckedChange={(value) => void toggle("casino_providers", provider.id, value)}/></div></div>)}{providers.length === 0 && <p className="text-sm text-muted-foreground">No providers configured.</p>}</CardContent></Card>
     <Card><CardHeader><CardTitle>Games</CardTitle></CardHeader><CardContent className="space-y-3">{games.map((game) => <div key={game.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"><div><span className="font-semibold">{game.name}</span><p className="mt-1 text-xs text-muted-foreground">{game.external_game_id} · {game.category}</p></div><div className="flex items-center gap-3"><Switch checked={Boolean(game.is_active)} onCheckedChange={(value) => void toggle("casino_games", game.id, value)}/><Button size="icon" variant="ghost" onClick={() => void removeGame(game.id)} aria-label="Delete game"><Trash2 className="h-4 w-4 text-danger"/></Button></div></div>)}{games.length === 0 && <p className="text-sm text-muted-foreground">No games configured.</p>}</CardContent></Card>
   </div></AdminLayout>;
 }
