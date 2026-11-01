@@ -74,31 +74,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: "Confirmation must exactly match the customer email" });
     }
 
-    const [betsResult, transactionsResult, adjustmentsResult, walletResult] = await Promise.all([
+    const [betsResult, transactionsResult, adjustmentsResult, ledgerAccountsResult] = await Promise.all([
       supabaseAdmin.from("bets").select("id", { count: "exact", head: true }).eq("user_id", userId),
       supabaseAdmin.from("wallet_transactions").select("id", { count: "exact", head: true }).eq("user_id", userId),
       supabaseAdmin.from("admin_balance_adjustments").select("id", { count: "exact", head: true }).eq("user_id", userId),
-      (supabaseAdmin as any).rpc("get_user_wallet_balance", { p_user_id: userId }),
+      supabaseAdmin.from("ledger_accounts").select("id,balance").eq("user_id", userId),
     ]);
 
     if (betsResult.error) throw betsResult.error;
     if (transactionsResult.error) throw transactionsResult.error;
     if (adjustmentsResult.error) throw adjustmentsResult.error;
-    if (walletResult.error) throw walletResult.error;
+    if (ledgerAccountsResult.error) throw ledgerAccountsResult.error;
 
-    const wallet = walletResult.data as {
-      cash_balance?: number;
-      bonus_balance?: number;
-      locked_balance?: number;
-    } | null;
-    const balance =
-      Number(wallet?.cash_balance || 0) +
-      Number(wallet?.bonus_balance || 0) +
-      Number(wallet?.locked_balance || 0);
+    const ledgerAccounts = ledgerAccountsResult.data || [];
+    const accountIds = ledgerAccounts.map((account) => account.id);
+    const postingsResult = accountIds.length
+      ? await supabaseAdmin
+          .from("ledger_postings")
+          .select("id", { count: "exact", head: true })
+          .in("account_id", accountIds)
+      : { count: 0, error: null };
+    if (postingsResult.error) throw postingsResult.error;
+
+    const balance = ledgerAccounts.reduce(
+      (total, account) => total + Number(account.balance || 0),
+      0
+    );
     const historyCount =
       Number(betsResult.count || 0) +
       Number(transactionsResult.count || 0) +
-      Number(adjustmentsResult.count || 0);
+      Number(adjustmentsResult.count || 0) +
+      Number(postingsResult.count || 0);
 
     if (Math.abs(balance) > 0.000001 || historyCount > 0) {
       return res.status(409).json({
@@ -147,6 +153,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       user_agent: req.headers["user-agent"] || null,
     });
     if (auditError) throw auditError;
+
+    if (accountIds.length) {
+      const { error: ledgerDeleteError } = await supabaseAdmin
+        .from("ledger_accounts")
+        .delete()
+        .in("id", accountIds);
+      if (ledgerDeleteError) throw ledgerDeleteError;
+    }
 
     const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId, false);
     if (authDeleteError) throw authDeleteError;
