@@ -15,6 +15,13 @@ const settingsSchema = z.object({
   defaultCasinoShareBps: z.number().int().min(0).max(10000),
 });
 
+const settlementStatusSchema = z.object({
+  resource: z.literal("settlement_status"),
+  id: z.string().uuid(),
+  status: z.enum(["approved","paid","disputed"]),
+  paymentReference: z.string().trim().max(240).optional().nullable(),
+});
+
 const adjustmentSchema = z.object({
   resource: z.literal("adjustment"),
   type: z.enum(["payment_fee","provider_fee","gaming_tax","chargeback","refund","bonus_cost","affiliate_commission","other_cost","other_income"]),
@@ -72,6 +79,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === "PATCH") {
       if (!canManageFinance(auth.adminRole)) return res.status(403).json({ error: "Finance role required" });
+
+      const settlementStatus = settlementStatusSchema.safeParse(req.body);
+      if (settlementStatus.success) {
+        if (settlementStatus.data.status === "paid" && !settlementStatus.data.paymentReference) {
+          return res.status(400).json({ error: "Payment reference is required when marking a settlement paid" });
+        }
+        const now = new Date().toISOString();
+        const changes: Record<string, unknown> = {
+          status: settlementStatus.data.status,
+          payment_reference: settlementStatus.data.paymentReference || null,
+        };
+        if (settlementStatus.data.status === "approved") changes.approved_at = now;
+        if (settlementStatus.data.status === "paid") { changes.approved_at = now; changes.paid_at = now; }
+        const { error } = await admin.from("casino_provider_settlements").update(changes).eq("id", settlementStatus.data.id);
+        if (error) throw error;
+        await admin.from("audit_logs").insert({
+          admin_id: auth.userId,
+          action: "casino_settlement_status_updated",
+          entity_type: "casino_provider_settlement",
+          entity_id: settlementStatus.data.id,
+          changes,
+        });
+        return res.status(200).json({ success: true });
+      }
+
       const parsed = settingsSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Valid finance settings are required" });
       const { error } = await admin.from("finance_settings").update({
