@@ -4,6 +4,45 @@ import { requireAdminApi } from "@/lib/server/requireAdminApi";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
 
 const assignableRoles = ["admin", "finance", "kyc", "support", "risk_manager", "sports_trader"] as const;
+const USERNAME_LOGIN_DOMAIN = "users.primebet.test";
+
+function resolveAdminIdentifier(value: string): {
+  email: string;
+  identifier: string;
+  kind: "email" | "username";
+} {
+  const identifier = value.trim().toLowerCase();
+
+  if (identifier.includes("@")) {
+    const email = z.string().email().max(320).safeParse(identifier);
+    if (!email.success) throw new Error("Enter a valid email address or username");
+    return { email: email.data, identifier: email.data, kind: "email" };
+  }
+
+  const validUsername =
+    /^[a-z0-9][a-z0-9._-]{2,31}$/.test(identifier) &&
+    !identifier.endsWith(".") &&
+    !identifier.includes("..");
+
+  if (!validUsername) {
+    throw new Error("Username must be 3–32 characters using letters, numbers, dot, underscore, or hyphen");
+  }
+
+  return {
+    email: `${identifier}@${USERNAME_LOGIN_DOMAIN}`,
+    identifier,
+    kind: "username",
+  };
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return "Admin operation failed";
+}
 
 async function writeAudit(adminId: string, action: string, entityId: string, changes: Record<string, unknown>) {
   const { error } = await supabaseAdmin.from("audit_logs").insert({
@@ -13,7 +52,7 @@ async function writeAudit(adminId: string, action: string, entityId: string, cha
     entity_id: entityId,
     changes,
   });
-  if (error) throw error;
+  if (error) console.error("Admin audit log failed", error);
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -36,20 +75,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === "POST") {
       const parsed = z.object({
-        email: z.string().trim().email().max(320).transform((value) => value.toLowerCase()),
+        identifier: z.string().trim().min(3).max(320),
         password: z.string().min(12).max(128),
         role: z.enum(assignableRoles),
-      }).safeParse(req.body);
+      }).safeParse({
+        ...(req.body || {}),
+        identifier: req.body?.identifier ?? req.body?.email,
+      });
       if (!parsed.success) {
         return res.status(400).json({
-          error: "A valid email, temporary password of at least 12 characters, and assignable role are required",
+          error: "Email or username, a temporary password of at least 12 characters, and an assignable role are required",
         });
+      }
+
+      let login: ReturnType<typeof resolveAdminIdentifier>;
+      try {
+        login = resolveAdminIdentifier(parsed.data.identifier);
+      } catch (error) {
+        return res.status(400).json({ error: getErrorMessage(error) });
       }
 
       const { data: existingProfile, error: profileError } = await supabaseAdmin
         .from("profiles")
         .select("id,email,is_admin,admin_role")
-        .eq("email", parsed.data.email)
+        .eq("email", login.email)
         .maybeSingle();
       if (profileError) throw profileError;
       if (existingProfile?.is_admin) {
@@ -61,12 +110,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (!profileId) {
         const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
-          email: parsed.data.email,
+          email: login.email,
           password: parsed.data.password,
           email_confirm: true,
           user_metadata: {
             force_password_change: true,
             created_by_super_admin: auth.userId,
+            login_identifier: login.identifier,
+            login_kind: login.kind,
           },
         });
 
@@ -80,7 +131,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const { error: upsertError } = await supabaseAdmin.from("profiles").upsert({
         id: profileId,
-        email: parsed.data.email,
+        email: login.email,
         is_admin: true,
         admin_role: parsed.data.role,
         is_suspended: false,
@@ -94,7 +145,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       await writeAudit(auth.userId, "admin_created", profileId, {
-        email: parsed.data.email,
+        email: login.email,
+        login_identifier: login.identifier,
+        login_kind: login.kind,
         role: parsed.data.role,
         created_login: createdAuthUser,
       });
@@ -102,9 +155,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(201).json({
         success: true,
         createdUser: createdAuthUser,
+        identifier: login.identifier,
+        loginKind: login.kind,
         message: createdAuthUser
-          ? "Admin login and permissions created"
-          : "Existing user promoted to admin",
+          ? `Admin login created for ${login.identifier}; verification is not required`
+          : `Existing account ${login.identifier} promoted to admin`,
       });
     }
 
@@ -152,6 +207,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   } catch (error) {
     console.error("Admin user management failed", error);
-    return res.status(500).json({ error: error instanceof Error ? error.message : "Admin operation failed" });
+    return res.status(500).json({ error: getErrorMessage(error) });
   }
 }
