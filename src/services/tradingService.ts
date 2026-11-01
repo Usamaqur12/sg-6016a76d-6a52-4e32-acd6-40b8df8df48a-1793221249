@@ -269,7 +269,11 @@ export async function configureSportMargin(
       }
     }
 
-    return { success: true };
+    const { data: repriced, error: repriceError } = await (supabase as any).rpc("reprice_sport_odds", {
+      p_sport_id: sportId,
+    });
+    if (repriceError) return { success: false, error: repriceError.message };
+    return { success: true, repriced: Number(repriced || 0) };
   } catch (error) {
     console.error("Configure margin error:", error);
     return { success: false, error: "Failed to configure margin" };
