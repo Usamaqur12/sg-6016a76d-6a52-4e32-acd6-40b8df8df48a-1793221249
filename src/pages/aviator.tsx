@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { Plane, ShieldCheck, Timer } from "lucide-react";
+import { Gauge, History, LockKeyhole, Plane, ShieldCheck, Timer, Wallet, Zap } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,15 +15,17 @@ import { useToast } from "@/hooks/use-toast";
 type GameState = {
   phase: "betting" | "running" | "crashed" | "paused";
   current_multiplier: number;
-  settings: { min_stake:number; max_stake:number; max_payout:number; is_paused:boolean };
+  settings: { min_stake:number; max_stake:number; max_payout:number; max_multiplier:number; house_edge_percent:number; is_paused:boolean };
   round: null | { id:string; round_number:number; server_seed_hash:string; server_seed_reveal:string|null; crash_multiplier:number|null; betting_closes_at:string; next_round_at:string };
   my_bet: null | { id:string; stake:number; status:string; cashout_multiplier:number|null; payout:number };
   history: Array<{ round_number:number; crash_multiplier:number; server_seed_hash:string; server_seed_reveal:string }>;
 };
 
-export default function AviatorPage() {
+const money=(value:number)=>new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(value);
+
+export default function AviatorPage(){
   const router=useRouter();
-  const { toast }=useToast();
+  const {toast}=useToast();
   const [game,setGame]=useState<GameState|null>(null);
   const [user,setUser]=useState<{id:string;email?:string}|null>(null);
   const [balance,setBalance]=useState(0);
@@ -33,7 +35,7 @@ export default function AviatorPage() {
 
   const loadBalance=useCallback(async()=>{
     const result=await getMyWalletBalances();
-    setBalance(Number(result.balances?.available ?? result.balances?.cash ?? 0));
+    setBalance(Number(result.balances?.available??result.balances?.cash??0));
   },[]);
   const loadGame=useCallback(async()=>{
     const {data,error}=await (supabase as any).rpc("aviator_get_state");
@@ -46,7 +48,7 @@ export default function AviatorPage() {
       setUser(current);
       if(current)void loadBalance();
     });
-    const gameTimer=window.setInterval(()=>void loadGame(),500);
+    const gameTimer=window.setInterval(()=>void loadGame(),400);
     const clockTimer=window.setInterval(()=>setNow(Date.now()),100);
     void loadGame();
     return()=>{window.clearInterval(gameTimer);window.clearInterval(clockTimer);};
@@ -67,7 +69,7 @@ export default function AviatorPage() {
     setBusy(true);
     const {data,error}=await (supabase as any).rpc("aviator_place_bet",{p_stake:amount});
     if(error)toast({title:"Bet not placed",description:error.message,variant:"destructive"});
-    else{setGame(data as GameState);toast({title:"Aviator bet placed"});await loadBalance();}
+    else{setGame(data as GameState);toast({title:"Bet accepted",description:"Cash out before the plane flies away."});await loadBalance();}
     setBusy(false);
   }
 
@@ -75,7 +77,7 @@ export default function AviatorPage() {
     setBusy(true);
     const {data,error}=await (supabase as any).rpc("aviator_cashout");
     if(error)toast({title:"Cash-out failed",description:error.message,variant:"destructive"});
-    else{setGame(data as GameState);toast({title:"Cash-out completed"});await loadBalance();}
+    else{setGame(data as GameState);toast({title:"Cash-out completed",description:"Your live wallet was credited."});await loadBalance();}
     setBusy(false);
   }
 
@@ -83,47 +85,100 @@ export default function AviatorPage() {
   const activeBet=game?.my_bet?.status==="placed";
   const canBet=game?.phase==="betting"&&!game.my_bet;
   const canCashout=game?.phase==="running"&&activeBet;
-  const phaseLabel=game?.phase==="betting"?"BETTING OPEN":game?.phase==="running"?"FLYING":game?.phase==="crashed"?"FLEW AWAY":"PAUSED";
+  const phaseLabel=game?.phase==="betting"?"PLACE YOUR BETS":game?.phase==="running"?"FLYING NOW":game?.phase==="crashed"?"FLEW AWAY":"GAME PAUSED";
+  const phaseColor=game?.phase==="crashed"?"text-rose-400":game?.phase==="running"?"text-emerald-300":"text-cyan-300";
+  const planePosition=game?.phase==="running"?"translate-x-24 -translate-y-16 rotate-[-10deg] sm:translate-x-40 sm:-translate-y-24":game?.phase==="crashed"?"translate-x-48 -translate-y-32 opacity-0":"";
 
-  return <div className="min-h-screen bg-background pb-14 lg:pb-0">
+  function changeStake(mode:"half"|"double"|"clear"|"max"){
+    const current=Number(stake)||0;
+    if(mode==="half")setStake(String(Math.max(Number(game?.settings.min_stake||1),current/2)));
+    if(mode==="double")setStake(String(Math.min(Number(game?.settings.max_stake||1000),current*2)));
+    if(mode==="clear")setStake("");
+    if(mode==="max")setStake(String(Math.min(balance,Number(game?.settings.max_stake||1000))));
+  }
+
+  return <div className="min-h-screen bg-[#05080f] pb-14 text-white lg:pb-0">
     <Header user={user?{email:user.email||"",balance}:null} onAuthClick={()=>router.push("/auth/login")}/>
-    <main className="container py-6"><div className="mx-auto max-w-6xl space-y-5">
-      <div className="flex items-end justify-between gap-3">
-        <div><h1 className="text-3xl font-black">Aviator</h1><p className="text-sm text-muted-foreground">Provably-fair live crash game</p></div>
-        <Badge variant="outline">Round #{game?.round?.round_number||"—"}</Badge>
-      </div>
-
-      <Card className="overflow-hidden border-primary/20"><CardContent className="relative min-h-[420px] bg-gradient-to-b from-sky-950 via-slate-950 to-background p-0">
-        <div className="flex min-h-[420px] flex-col items-center justify-center p-4 text-center">
-          <div className="text-xs font-bold tracking-[.3em] text-primary">{phaseLabel}</div>
-          <div className={"mt-3 font-mono text-7xl font-black sm:text-8xl "+(game?.phase==="crashed"?"text-danger":"text-white")}>{multiplier.toFixed(2)}x</div>
-          {game?.phase==="betting"&&<div className="mt-4 flex items-center gap-2 text-muted-foreground"><Timer className="h-5 w-5"/>Starts in {countdown.toFixed(1)}s</div>}
-          <Plane className={"mt-8 h-16 w-16 text-primary transition-transform duration-500 "+(game?.phase==="running"?"translate-x-24 -translate-y-12 rotate-[-12deg]":"")}/>
-          {game?.round&&<div className="mt-6 max-w-xl break-all text-[10px] text-slate-400">Commitment: {game.round.server_seed_hash}</div>}
-        </div>
-      </CardContent></Card>
-
-      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-        <Card><CardHeader><CardTitle>Place bet</CardTitle></CardHeader><CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-            <Input type="number" value={stake} onChange={event=>setStake(event.target.value)} disabled={!canBet||busy}/>
-            {canCashout?<Button size="lg" className="bg-success" onClick={()=>void cashout()} disabled={busy}>Cash out @ {multiplier.toFixed(2)}x</Button>:<Button size="lg" onClick={()=>void placeBet()} disabled={!canBet||busy}>{user?"Place Bet":"Login to Bet"}</Button>}
+    <main className="container py-5">
+      <div className="mx-auto max-w-[1380px] space-y-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-emerald-400 shadow-[0_0_35px_rgba(34,211,238,.28)]"><Plane className="h-6 w-6 text-slate-950"/></div>
+            <div><h1 className="text-2xl font-black tracking-tight">PrimeBet <span className="text-cyan-300">Aviator</span></h1><p className="text-xs text-slate-400">Live · provably fair · instant cash-out</p></div>
           </div>
-          <div className="grid grid-cols-4 gap-2">{[5,10,25,50].map(amount=><Button key={amount} variant="outline" size="sm" onClick={()=>setStake(String(amount))} disabled={!canBet}>\${amount}</Button>)}</div>
-          <p className="text-xs text-muted-foreground">Limits: \${Number(game?.settings.min_stake||0).toFixed(2)} – \${Number(game?.settings.max_stake||0).toFixed(2)}</p>
-          {game?.my_bet&&<div className="rounded border p-3">My bet: \${Number(game.my_bet.stake).toFixed(2)} · <b>{game.my_bet.status}</b>{game.my_bet.status==="cashed_out"&&<div className="text-success">Won \${Number(game.my_bet.payout).toFixed(2)}</div>}</div>}
-        </CardContent></Card>
-        <Card><CardHeader><CardTitle>Live wallet</CardTitle></CardHeader><CardContent><div className="font-mono text-3xl font-black">\${balance.toFixed(2)}</div></CardContent></Card>
-      </div>
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {(game?.history||[]).slice(0,10).map(round=><div key={round.round_number} className={"shrink-0 rounded-full border px-3 py-1.5 font-mono text-xs font-black "+(Number(round.crash_multiplier)>=10?"border-fuchsia-400/40 bg-fuchsia-400/10 text-fuchsia-300":Number(round.crash_multiplier)>=2?"border-cyan-400/40 bg-cyan-400/10 text-cyan-300":"border-rose-400/40 bg-rose-400/10 text-rose-300")}>{Number(round.crash_multiplier).toFixed(2)}x</div>)}
+          </div>
+        </div>
 
-      <Card><CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary"/>Provably-fair history</CardTitle></CardHeader><CardContent>
-        <div className="grid gap-2 md:grid-cols-2">{(game?.history||[]).map(round=><div key={round.round_number} className="rounded border p-3 text-xs">
-          <div className="flex justify-between"><b>Round #{round.round_number}</b><Badge>{Number(round.crash_multiplier).toFixed(2)}x</Badge></div>
-          <div className="mt-2 break-all text-muted-foreground">Seed: {round.server_seed_reveal}</div>
-          <div className="mt-1 break-all text-muted-foreground">Hash: {round.server_seed_hash}</div>
-        </div>)}</div>
-      </CardContent></Card>
-    </div></main>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
+          <section className="relative min-h-[540px] overflow-hidden rounded-[28px] border border-cyan-400/15 bg-[#07111f] shadow-[0_25px_80px_rgba(0,0,0,.45)]">
+            <div className="absolute inset-0" style={{background:"radial-gradient(circle at 65% 35%, rgba(34,211,238,.15), transparent 30%), radial-gradient(circle at 25% 75%, rgba(16,185,129,.12), transparent 32%), linear-gradient(180deg,#09182b 0%,#060a12 75%)"}}/>
+            <div className="absolute inset-0 opacity-25" style={{backgroundImage:"linear-gradient(rgba(56,189,248,.15) 1px,transparent 1px),linear-gradient(90deg,rgba(56,189,248,.15) 1px,transparent 1px)",backgroundSize:"42px 42px",transform:"perspective(500px) rotateX(62deg) scale(1.5)",transformOrigin:"bottom"}}/>
+            <svg className="absolute bottom-6 left-4 h-[58%] w-[88%] overflow-visible opacity-80" viewBox="0 0 900 320" preserveAspectRatio="none">
+              <defs><linearGradient id="flightLine" x1="0" x2="1"><stop offset="0%" stopColor="#10b981"/><stop offset="55%" stopColor="#22d3ee"/><stop offset="100%" stopColor="#a855f7"/></linearGradient></defs>
+              <path d="M10 300 C 220 295, 360 250, 500 180 S 720 40, 890 18" fill="none" stroke="rgba(34,211,238,.08)" strokeWidth="24"/>
+              <path d="M10 300 C 220 295, 360 250, 500 180 S 720 40, 890 18" fill="none" stroke="url(#flightLine)" strokeWidth="4" strokeDasharray="12 12">
+                {game?.phase==="running"&&<animate attributeName="stroke-dashoffset" from="120" to="0" dur="1.2s" repeatCount="indefinite"/>}
+              </path>
+            </svg>
+
+            <div className="relative z-10 flex min-h-[540px] flex-col">
+              <div className="flex items-center justify-between p-5">
+                <div className="flex items-center gap-2"><Badge className="border-0 bg-white/10 text-white backdrop-blur">Round #{game?.round?.round_number||"—"}</Badge><span className={"h-2 w-2 rounded-full "+(game?.phase==="running"?"animate-pulse bg-emerald-400":"bg-cyan-400")}/></div>
+                <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-slate-300 backdrop-blur"><LockKeyhole className="h-3.5 w-3.5 text-emerald-300"/>Fairness locked</div>
+              </div>
+
+              <div className="flex flex-1 flex-col items-center justify-center px-5 text-center">
+                <div className={"text-xs font-black tracking-[.38em] "+phaseColor}>{phaseLabel}</div>
+                <div className={"mt-4 font-mono text-7xl font-black leading-none tracking-[-.06em] drop-shadow-[0_0_30px_rgba(34,211,238,.25)] sm:text-9xl "+(game?.phase==="crashed"?"text-rose-400":"text-white")}>{multiplier.toFixed(2)}<span className="ml-1 text-4xl sm:text-6xl">x</span></div>
+                {game?.phase==="betting"&&<div className="mt-5 flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100"><Timer className="h-4 w-4"/>Taking off in <b>{countdown.toFixed(1)}s</b></div>}
+                {game?.phase==="crashed"&&<div className="mt-5 rounded-full border border-rose-400/20 bg-rose-400/10 px-4 py-2 text-sm font-bold text-rose-200">Next round in {countdown.toFixed(1)}s</div>}
+                <div className={"mt-10 transition-all duration-700 "+planePosition}>
+                  <div className="relative"><div className="absolute -inset-6 rounded-full bg-cyan-400/20 blur-2xl"/><Plane className="relative h-20 w-20 text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,.7)] sm:h-28 sm:w-28"/></div>
+                </div>
+              </div>
+
+              <div className="m-4 flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/25 p-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+                <div className="truncate font-mono text-[10px] text-slate-400">SHA-256: {game?.round?.server_seed_hash||"Waiting for round commitment…"}</div>
+                <div className="shrink-0 text-[10px] text-emerald-300">Seed revealed after crash</div>
+              </div>
+            </div>
+          </section>
+
+          <aside className="space-y-4">
+            <Card className="overflow-hidden border-white/10 bg-[#0b1220] text-white shadow-2xl">
+              <div className="h-1 bg-gradient-to-r from-emerald-400 via-cyan-400 to-fuchsia-500"/>
+              <CardContent className="space-y-5 p-5">
+                <div className="flex items-center justify-between"><div><div className="text-xs text-slate-400">Available balance</div><div className="mt-1 font-mono text-2xl font-black">{"$"}{money(balance)}</div></div><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/10"><Wallet className="h-5 w-5 text-emerald-300"/></div></div>
+                <div className="space-y-2"><div className="flex items-center justify-between"><label className="text-xs font-bold text-slate-300">Bet amount</label><span className="text-[10px] text-slate-500">USD</span></div><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-500">$</span><Input type="number" value={stake} onChange={event=>setStake(event.target.value)} disabled={!canBet||busy} className="h-14 border-white/10 bg-black/25 pl-8 font-mono text-xl font-black text-white"/></div></div>
+                <div className="grid grid-cols-4 gap-2">{[5,10,25,50].map(amount=><button key={amount} onClick={()=>setStake(String(amount))} disabled={!canBet} className="rounded-xl border border-white/10 bg-white/5 py-2 text-xs font-bold text-slate-300 transition hover:border-cyan-300/40 hover:bg-cyan-300/10 disabled:opacity-40">{"$"}{amount}</button>)}</div>
+                <div className="grid grid-cols-4 gap-2">{[["½","half"],["2×","double"],["MAX","max"],["CLR","clear"]].map(([label,mode])=><button key={mode} onClick={()=>changeStake(mode as "half"|"double"|"clear"|"max")} disabled={!canBet} className="rounded-xl bg-slate-800 py-2 text-[10px] font-black text-slate-300 hover:bg-slate-700 disabled:opacity-40">{label}</button>)}</div>
+
+                {canCashout?<Button className="h-16 w-full bg-gradient-to-r from-emerald-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_0_35px_rgba(16,185,129,.25)] hover:from-emerald-300 hover:to-cyan-300" onClick={()=>void cashout()} disabled={busy}>CASH OUT · {multiplier.toFixed(2)}x</Button>:<Button className="h-16 w-full bg-gradient-to-r from-cyan-400 to-blue-500 text-lg font-black text-slate-950 shadow-[0_0_35px_rgba(34,211,238,.2)] hover:from-cyan-300 hover:to-blue-400" onClick={()=>void placeBet()} disabled={!canBet||busy}>{user?"PLACE BET":"LOGIN TO BET"}</Button>}
+
+                <div className="grid grid-cols-2 gap-2 text-[10px]"><div className="rounded-xl bg-white/5 p-3 text-slate-400">Min stake<div className="mt-1 font-mono font-bold text-white">{"$"}{money(Number(game?.settings.min_stake||0))}</div></div><div className="rounded-xl bg-white/5 p-3 text-slate-400">Max stake<div className="mt-1 font-mono font-bold text-white">{"$"}{money(Number(game?.settings.max_stake||0))}</div></div></div>
+
+                {game?.my_bet&&<div className={"rounded-2xl border p-4 "+(game.my_bet.status==="cashed_out"?"border-emerald-400/30 bg-emerald-400/10":"border-cyan-400/20 bg-cyan-400/5")}><div className="flex items-center justify-between"><span className="text-sm font-bold">Your bet · {"$"}{money(Number(game.my_bet.stake))}</span><Badge variant="outline" className="border-white/20 text-white">{game.my_bet.status.replace("_"," ")}</Badge></div>{game.my_bet.status==="cashed_out"&&<div className="mt-2 font-mono text-lg font-black text-emerald-300">Won {"$"}{money(Number(game.my_bet.payout))}</div>}</div>}
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/10 bg-[#0b1220] text-white"><CardContent className="grid grid-cols-3 gap-2 p-4 text-center"><Stat icon={<Gauge className="h-4 w-4"/>} label="Max win" value={money(Number(game?.settings.max_payout||0))}/><Stat icon={<Zap className="h-4 w-4"/>} label="Live" value="400ms"/><Stat icon={<ShieldCheck className="h-4 w-4"/>} label="Edge" value={Number(game?.settings.house_edge_percent||0).toFixed(1)+"%"}/></CardContent></Card>
+          </aside>
+        </div>
+
+        <Card className="border-white/10 bg-[#0b1220] text-white">
+          <CardContent className="p-5">
+            <div className="mb-4 flex items-center gap-2"><History className="h-5 w-5 text-cyan-300"/><h2 className="font-bold">Provably-fair round history</h2></div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{(game?.history||[]).map(round=><div key={round.round_number} className="rounded-2xl border border-white/10 bg-white/[.025] p-4"><div className="flex items-center justify-between"><span className="text-xs text-slate-400">Round #{round.round_number}</span><span className={"font-mono text-lg font-black "+(Number(round.crash_multiplier)>=2?"text-cyan-300":"text-rose-300")}>{Number(round.crash_multiplier).toFixed(2)}x</span></div><div className="mt-3 truncate font-mono text-[10px] text-slate-500">Seed: {round.server_seed_reveal}</div><div className="mt-1 truncate font-mono text-[10px] text-slate-600">Hash: {round.server_seed_hash}</div></div>)}</div>
+          </CardContent>
+        </Card>
+      </div>
+    </main>
     <Footer/><MobileBottomNav/>
   </div>;
+}
+
+function Stat({icon,label,value}:{icon:React.ReactNode;label:string;value:string}){
+  return <div className="rounded-xl bg-white/5 p-3"><div className="mx-auto flex w-fit text-cyan-300">{icon}</div><div className="mt-2 text-[9px] uppercase tracking-wider text-slate-500">{label}</div><div className="mt-1 text-xs font-black">{value}</div></div>;
 }
