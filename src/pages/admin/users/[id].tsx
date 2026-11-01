@@ -115,14 +115,18 @@ export default function AdminUserDetailsPage() {
       toast({ title: "Reason required", description: "Enter an audit reason of at least 5 characters.", variant: "destructive" });
       return;
     }
-    if (action === "archive" && !window.confirm("Archive this user and disable login, wallet, betting, deposits and withdrawals?")) return;
+    if (action === "archive" && !window.confirm("Archive this user? The account will disappear from active users and login, wallet, betting, deposits and withdrawals will be disabled.")) return;
     setSaving(true);
     try {
       await adminFetch("/api/admin/users/" + details.profile.id + "/controls", {
         method: "PATCH",
         body: JSON.stringify(action ? { action, reason: controlReason.trim() } : { controls, reason: controlReason.trim() }),
       });
-      toast({ title: action === "archive" ? "User archived" : action === "restore" ? "User restored" : "Account control updated" });
+      toast({ title: action === "archive" ? "User deleted safely" : action === "restore" ? "User restored" : "Account control updated" });
+      if (action === "archive") {
+        await router.push("/admin/users");
+        return;
+      }
       await loadDetails();
     } catch (error) {
       toast({ title: "Control update failed", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
@@ -187,7 +191,7 @@ export default function AdminUserDetailsPage() {
                   {details.profile.account_status === "closed" ? (
                     <Button variant="outline" disabled={saving} onClick={() => void updateControls(undefined, "restore")}>Restore User</Button>
                   ) : (
-                    <Button variant="destructive" disabled={saving} onClick={() => void updateControls(undefined, "archive")}>Delete / Archive User</Button>
+                    <Button variant="destructive" disabled={saving} onClick={() => void updateControls(undefined, "archive")}>Archive User (safe delete)</Button>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">Archive is recoverable and preserves transaction, bet and audit history.</p>
