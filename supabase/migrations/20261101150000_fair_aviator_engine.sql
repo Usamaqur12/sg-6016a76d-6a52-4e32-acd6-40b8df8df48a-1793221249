@@ -81,7 +81,7 @@ DECLARE
   v_unit NUMERIC;
   v_result NUMERIC;
 BEGIN
-  v_hex:=encode(hmac(p_client_seed||':'||p_nonce::TEXT,p_server_seed,'sha256'),'hex');
+  v_hex:=encode(extensions.hmac(p_client_seed||':'||p_nonce::TEXT,p_server_seed,'sha256'),'hex');
   v_value:=(('x'||substr(v_hex,1,13))::bit(52))::BIGINT;
   v_unit:=v_value::NUMERIC/4503599627370496::NUMERIC;
   v_result:=floor((((100-p_house_edge)/100)/GREATEST(0.0000000001,1-v_unit))*100)/100;
@@ -140,8 +140,8 @@ BEGIN
     RETURN v_round.id;
   END IF;
 
-  v_seed:=encode(gen_random_bytes(32),'hex');
-  v_hash:=encode(digest(v_seed,'sha256'),'hex');
+  v_seed:=encode(extensions.gen_random_bytes(32),'hex');
+  v_hash:=encode(extensions.digest(v_seed,'sha256'),'hex');
   SELECT COALESCE(MAX(round_number),0)+1 INTO v_nonce FROM public.aviator_rounds;
   v_crash:=public.aviator_calculate_crash(
     v_seed,v_client,v_nonce,v_settings.house_edge_percent,v_settings.max_multiplier
