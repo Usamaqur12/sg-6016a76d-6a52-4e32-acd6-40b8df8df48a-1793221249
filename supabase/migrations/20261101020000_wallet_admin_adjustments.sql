@@ -20,22 +20,8 @@ CREATE TABLE IF NOT EXISTS public.admin_balance_adjustments (
 -- Enable RLS on admin_balance_adjustments
 ALTER TABLE public.admin_balance_adjustments ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies for admin_balance_adjustments using helper functions
--- Finance admins can read all adjustments
-CREATE POLICY "finance_read_balance_adjustments"
-  ON public.admin_balance_adjustments
-  FOR SELECT
-  TO authenticated
-  USING (
-    public.has_admin_role(auth.uid(), ARRAY['super_admin', 'admin', 'finance'])
-  );
-
--- Users can read their own adjustments
-CREATE POLICY "users_read_own_balance_adjustments"
-  ON public.admin_balance_adjustments
-  FOR SELECT
-  TO authenticated
-  USING (user_id = auth.uid());
+-- No policies needed - access is only via SECURITY DEFINER function admin_adjust_user_balance()
+-- which performs authorization checks internally
 
 -- Add amount constraint
 ALTER TABLE public.admin_balance_adjustments

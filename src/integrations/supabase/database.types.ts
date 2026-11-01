@@ -72,6 +72,70 @@ export type Database = {
           },
         ]
       }
+      admin_balance_adjustments: {
+        Row: {
+          admin_id: string
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at: string
+          id: string
+          idempotency_key: string
+          reason: string
+          updated_at: string
+          user_id: string
+          wallet_transaction_id: string | null
+        }
+        Insert: {
+          admin_id: string
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          reason: string
+          updated_at?: string
+          user_id: string
+          wallet_transaction_id?: string | null
+        }
+        Update: {
+          admin_id?: string
+          amount?: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          reason?: string
+          updated_at?: string
+          user_id?: string
+          wallet_transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_balance_adjustments_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_balance_adjustments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_balance_adjustments_wallet_transaction_id_fkey"
+            columns: ["wallet_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           created_at: string
@@ -3357,6 +3421,16 @@ export type Database = {
           p_bet_id: string
           p_cashout_type?: string
           p_partial_amount?: number
+        }
+        Returns: Json
+      }
+      admin_adjust_user_balance: {
+        Args: {
+          p_admin_id: string
+          p_amount: number
+          p_idempotency_key: string
+          p_reason: string
+          p_user_id: string
         }
         Returns: Json
       }
