@@ -1,7 +1,35 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
 import { requireAdminApi } from "@/lib/server/requireAdminApi";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
+
+function createAdminRequestClient(req: NextApiRequest) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const publicKey = (
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )?.trim();
+  const authorization = req.headers.authorization;
+
+  if (!url || !publicKey || !authorization?.startsWith("Bearer ")) {
+    throw new Error("Authenticated Supabase admin session is not configured");
+  }
+
+  return createClient(url, publicKey, {
+    global: { headers: { Authorization: authorization } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return "Account control update failed";
+}
 
 const controlsSchema = z.object({
   reason: z.string().trim().min(5).max(500),
@@ -80,7 +108,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const { data: updated, error: updateError } = await (supabaseAdmin as any)
+    // Run protected profile changes as the authenticated admin. This keeps
+    // database role/trigger checks effective with opaque Supabase secret keys.
+    const adminClient = createAdminRequestClient(req);
+    const { data: updated, error: updateError } = await (adminClient as any)
       .from("profiles")
       .update(updates)
       .eq("id", userId)
@@ -100,7 +131,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           account_control_reason: parsedBody.data.reason,
         },
       });
-      if (authError) throw authError;
+      if (authError) {
+        console.error("Auth archive state sync failed", authError);
+        if (parsedBody.data.action === "restore") {
+          throw new Error("Profile restored, but authentication could not be re-enabled. Retry Restore User.");
+        }
+      }
     }
 
     const forwardedFor = req.headers["x-forwarded-for"];
@@ -120,6 +156,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ success: true, profile: updated });
   } catch (error) {
     console.error("Account control update failed", error);
-    return res.status(500).json({ error: error instanceof Error ? error.message : "Account control update failed" });
+    return res.status(500).json({ error: getErrorMessage(error) });
   }
 }
