@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
+const USERNAME_LOGIN_DOMAIN = "users.primebet.test";
+
+function toAdminAuthEmail(identifier: string): string {
+  const value = identifier.trim().toLowerCase();
+  return value.includes("@") ? value : `${value}@${USERNAME_LOGIN_DOMAIN}`;
+}
+
 export default function AdminLogin() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -21,7 +28,7 @@ export default function AdminLogin() {
 
     try {
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: toAdminAuthEmail(email),
         password,
       });
 
@@ -75,14 +82,14 @@ export default function AdminLogin() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email or username</Label>
               <Input
                 id="email"
-                type="email"
-                autoComplete="email"
+                type="text"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@example.com"
+                placeholder="admin@example.com or username"
                 required
                 disabled={loading}
                 className="h-11"
