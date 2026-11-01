@@ -28,6 +28,8 @@ type UserDetails = {
     withdrawals_disabled: boolean;
     account_deleted_at: string | null;
     control_reason: string | null;
+    account_anonymized_at: string | null;
+    anonymization_reference: string | null;
   };
   wallet: { currency: string; cash: number; bonus: number; locked: number; available: number };
   transactions: Array<Record<string, any>>;
@@ -136,6 +138,36 @@ export default function AdminUserDetailsPage() {
     }
   }
 
+  async function anonymizeAndCloseUser() {
+    if (!details || details.requesterRole !== "super_admin") return;
+    if (controlReason.trim().length < 5) {
+      toast({ title: "Reason required", description: "Enter an audit reason of at least 5 characters.", variant: "destructive" });
+      return;
+    }
+    if (!window.confirm("Anonymize and close this customer? Personal data and KYC documents will be removed. Betting, wallet and audit history will remain under an anonymous customer ID. This cannot be reversed.")) return;
+    const confirmation = window.prompt(`Type ${details.profile.email} to confirm anonymization.`);
+    if (confirmation?.trim().toLowerCase() !== details.profile.email.toLowerCase()) {
+      if (confirmation !== null) toast({ title: "Anonymization cancelled", description: "The email confirmation did not match.", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await adminFetch("/api/admin/users/" + details.profile.id + "/anonymize", {
+        method: "POST",
+        body: JSON.stringify({ confirmation: confirmation.trim(), reason: controlReason.trim() }),
+      });
+      toast({
+        title: "Customer anonymized and closed",
+        description: result.warnings?.length ? result.message + " Some cleanup items need manual review." : result.message,
+      });
+      await router.push("/admin/users");
+    } catch (error) {
+      toast({ title: "Anonymization failed", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function permanentlyDeleteUser() {
     if (!details || details.requesterRole !== "super_admin") return;
     if (controlReason.trim().length < 5) {
@@ -238,22 +270,32 @@ export default function AdminUserDetailsPage() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">Archive is recoverable and preserves transaction, bet and audit history.</p>
-                {details.requesterRole === "super_admin" && (
-                  <div className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="font-semibold text-destructive">Permanent deletion</div>
-                      <p className="text-xs text-muted-foreground">
-                        Only available for empty/test accounts with zero balance and no bets or financial history.
-                      </p>
+                {details.requesterRole === "super_admin" && !details.profile.account_anonymized_at && (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="font-semibold text-warning">Anonymize & Close</div>
+                        <p className="text-xs text-muted-foreground">Removes personal data and KYC files, permanently blocks access, and preserves anonymous financial/betting history. Balance and pending activity must be zero.</p>
+                      </div>
+                      <Button variant="outline" disabled={saving} onClick={() => void anonymizeAndCloseUser()}>
+                        <ShieldCheck className="mr-2 h-4 w-4" />Anonymize & Close
+                      </Button>
                     </div>
-                    <Button
-                      variant="destructive"
-                      disabled={saving}
-                      onClick={() => void permanentlyDeleteUser()}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Permanently Delete
-                    </Button>
+                    <div className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="font-semibold text-destructive">Permanent deletion</div>
+                        <p className="text-xs text-muted-foreground">Only for empty/test accounts with zero balance and no betting, wallet or audit history.</p>
+                      </div>
+                      <Button variant="destructive" disabled={saving} onClick={() => void permanentlyDeleteUser()}>
+                        <Trash2 className="mr-2 h-4 w-4" />Permanently Delete
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {details.profile.account_anonymized_at && (
+                  <div className="rounded-lg border border-muted p-4 text-sm">
+                    <div className="font-semibold">Customer anonymized and closed</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{new Date(details.profile.account_anonymized_at).toLocaleString()} · Reference {details.profile.anonymization_reference || "recorded"}</div>
                   </div>
                 )}
               </CardContent>
