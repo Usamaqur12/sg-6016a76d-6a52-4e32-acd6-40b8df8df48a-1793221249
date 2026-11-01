@@ -31,6 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (transactionsResult.error) throw transactionsResult.error;
     if (betsResult.error) throw betsResult.error;
     return res.status(200).json({
+      requesterRole: auth.adminRole,
       profile,
       wallet: {
         currency: "USD",
