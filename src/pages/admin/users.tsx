@@ -37,6 +37,7 @@ export default function AdminUsers() {
   const [creditReason, setCreditReason] = useState("");
   const [creditKey, setCreditKey] = useState("");
   const [crediting, setCrediting] = useState(false);
+  const [balanceOperation, setBalanceOperation] = useState<"add" | "subtract">("add");
   const [showAddUserDialog, setShowAddUserDialog] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserName, setNewUserName] = useState("");
@@ -120,6 +121,7 @@ export default function AdminUsers() {
     setCreditAmount("");
     setCreditReason("");
     setCreditKey(crypto.randomUUID());
+    setBalanceOperation("add");
   }
 
   async function creditUserBalance() {
@@ -131,16 +133,20 @@ export default function AdminUsers() {
     }
     setCrediting(true);
     try {
-      const body = await adminFetch("/api/admin/users/credit-balance", {
+      const body = await adminFetch("/api/admin/users/adjust-balance", {
         method: "POST",
         body: JSON.stringify({
           userId: balanceUser.id,
           amount,
+          operation: balanceOperation,
           reason: creditReason.trim(),
           idempotencyKey: creditKey,
         }),
       });
-      toast({ title: "Balance credited", description: `New balance: $${Number(body.result?.balance || 0).toFixed(2)}` });
+      toast({
+        title: balanceOperation === "add" ? "Balance added" : "Balance deducted",
+        description: `New balance: ${Number(body.result?.balance || 0).toFixed(2)}`,
+      });
       setBalanceUser(null);
       await loadUsers();
     } catch (error) {
@@ -412,7 +418,7 @@ export default function AdminUsers() {
                       {getKycBadge(user.kyc_status)}
                       {["super_admin", "admin", "finance"].includes(currentAdminRole) && (
                         <Button size="sm" variant="default" onClick={() => openBalanceCredit(user)}>
-                          <Wallet className="mr-1 h-4 w-4" /> Add Balance
+                          <Wallet className="mr-1 h-4 w-4" /> Adjust Balance
                         </Button>
                       )}
                       <Button
@@ -501,14 +507,24 @@ export default function AdminUsers() {
       <Dialog open={Boolean(balanceUser)} onOpenChange={(open) => !open && !crediting && setBalanceUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add user balance</DialogTitle>
+            <DialogTitle>Adjust user balance</DialogTitle>
             <DialogDescription>
-              Credit cash balance for {balanceUser?.email}. This creates a wallet transaction, ledger journal and audit log.
+              Add or deduct cash for {balanceUser?.email}. Every adjustment creates a wallet transaction, ledger journal and audit log.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="rounded-lg border p-3 text-sm">
               Current balance: <span className="font-mono font-bold">${balanceUser?.wallet_balance.toFixed(2)}</span>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="balance-operation">Operation</Label>
+              <Select value={balanceOperation} onValueChange={(value) => setBalanceOperation(value as "add" | "subtract")}>
+                <SelectTrigger id="balance-operation"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="add">Add balance</SelectItem>
+                  <SelectItem value="subtract">Deduct balance</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="credit-amount">Amount (USD)</Label>
@@ -523,7 +539,7 @@ export default function AdminUsers() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setBalanceUser(null)} disabled={crediting}>Cancel</Button>
             <Button onClick={() => void creditUserBalance()} disabled={crediting}>
-              {crediting ? "Crediting…" : "Confirm credit"}
+              {crediting ? "Saving…" : balanceOperation === "add" ? "Confirm addition" : "Confirm deduction"}
             </Button>
           </DialogFooter>
         </DialogContent>
