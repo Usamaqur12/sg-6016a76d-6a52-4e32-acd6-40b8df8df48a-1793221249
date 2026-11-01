@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
 import { requireAdminApi } from "@/lib/server/requireAdminApi";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
 
@@ -42,6 +43,24 @@ function getErrorMessage(error: unknown): string {
     if (typeof message === "string" && message.trim()) return message;
   }
   return "Admin operation failed";
+}
+
+function createAdminRequestClient(req: NextApiRequest) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const publicKey = (
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )?.trim();
+  const authorization = req.headers.authorization;
+
+  if (!url || !publicKey || !authorization?.startsWith("Bearer ")) {
+    throw new Error("Authenticated Supabase admin session is not configured");
+  }
+
+  return createClient(url, publicKey, {
+    global: { headers: { Authorization: authorization } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 }
 
 async function writeAudit(adminId: string, action: string, entityId: string, changes: Record<string, unknown>) {
@@ -129,19 +148,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         createdAuthUser = true;
       }
 
-      const { error: upsertError } = await supabaseAdmin.from("profiles").upsert({
-        id: profileId,
-        email: login.email,
-        is_admin: true,
-        admin_role: parsed.data.role,
-        is_suspended: false,
-      }, { onConflict: "id" });
+      const { data: targetProfile, error: targetProfileError } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("id", profileId)
+        .maybeSingle();
+      if (targetProfileError) throw targetProfileError;
 
-      if (upsertError) {
+      if (!targetProfile) {
+        const { error: profileInsertError } = await supabaseAdmin.from("profiles").insert({
+          id: profileId,
+          email: login.email,
+          is_admin: false,
+          admin_role: null,
+          is_suspended: false,
+        });
+        if (profileInsertError) {
+          if (createdAuthUser) await supabaseAdmin.auth.admin.deleteUser(profileId);
+          throw profileInsertError;
+        }
+      }
+
+      // The database protects admin authority with the authenticated
+      // super-admin identity. New Supabase secret keys are opaque rather than
+      // JWTs, so this mutation intentionally uses the caller's verified token.
+      const adminClient = createAdminRequestClient(req);
+      const { data: updatedProfile, error: upsertError } = await adminClient
+        .from("profiles")
+        .update({
+          email: login.email,
+          is_admin: true,
+          admin_role: parsed.data.role,
+          is_suspended: false,
+        })
+        .eq("id", profileId)
+        .select("id")
+        .maybeSingle();
+
+      if (upsertError || !updatedProfile) {
         if (createdAuthUser) {
           await supabaseAdmin.auth.admin.deleteUser(profileId);
         }
-        throw upsertError;
+        throw upsertError || new Error("Admin profile could not be updated");
       }
 
       await writeAudit(auth.userId, "admin_created", profileId, {
@@ -177,7 +225,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!target?.is_admin) return res.status(404).json({ error: "Admin not found" });
       if (target.admin_role === "super_admin") return res.status(403).json({ error: "Another super admin cannot be suspended here" });
 
-      const { error } = await supabaseAdmin.from("profiles").update({ is_suspended: parsed.data.suspended }).eq("id", parsed.data.id);
+      const adminClient = createAdminRequestClient(req);
+      const { error } = await adminClient.from("profiles").update({ is_suspended: parsed.data.suspended }).eq("id", parsed.data.id);
       if (error) throw error;
       await writeAudit(auth.userId, parsed.data.suspended ? "admin_suspended" : "admin_unsuspended", parsed.data.id, {});
       return res.status(200).json({ success: true });
@@ -197,7 +246,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!target?.is_admin) return res.status(404).json({ error: "Admin not found" });
       if (target.admin_role === "super_admin") return res.status(403).json({ error: "Another super admin cannot be removed here" });
 
-      const { error } = await supabaseAdmin.from("profiles").update({ is_admin: false, admin_role: null }).eq("id", id.data);
+      const adminClient = createAdminRequestClient(req);
+      const { error } = await adminClient.from("profiles").update({ is_admin: false, admin_role: null }).eq("id", id.data);
       if (error) throw error;
       await writeAudit(auth.userId, "admin_removed", id.data, { email: target.email, previous_role: target.admin_role });
       return res.status(200).json({ success: true });
