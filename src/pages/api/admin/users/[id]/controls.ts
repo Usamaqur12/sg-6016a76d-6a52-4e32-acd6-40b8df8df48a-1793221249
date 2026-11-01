@@ -62,10 +62,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!parsedId.success || !parsedBody.success) {
     return res.status(400).json({ error: "Valid user, controls and a reason of at least 5 characters are required" });
   }
-  if (parsedBody.data.action && auth.adminRole !== "super_admin") {
-    return res.status(403).json({ error: "Only a super admin can archive or restore a user" });
-  }
-
   try {
     const userId = parsedId.data;
     const { data: target, error: targetError } = await (supabaseAdmin as any)
