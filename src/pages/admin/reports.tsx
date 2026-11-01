@@ -1,405 +1,265 @@
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { supabase } from "@/integrations/supabase/client";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  BarChart3, TrendingUp, DollarSign, Users, 
-  Receipt, Download, Calendar, FileText 
-} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { canAccessAdminArea } from "@/lib/adminRoles";
+import { supabase } from "@/integrations/supabase/client";
+import { BarChart3, Calculator, Download, RefreshCw, Save, WalletCards } from "lucide-react";
+
+type RevenueGroup = { stakes: number; payouts: number; ggr: number; refunds?: number; providerShare?: number };
+type Deductions = {
+  bonusCost: number; partnerCommission: number; paymentFees: number; providerFees: number;
+  chargebacks: number; refunds: number; gamingTax: number; otherCost: number; otherIncome: number;
+};
+type Summary = {
+  periodFrom: string; periodTo: string; sportsbook: RevenueGroup; casino: RevenueGroup; aviator: RevenueGroup;
+  deductions: Deductions; deposits: number; ggr: number; ngr: number;
+};
+type Settings = { payment_fee_bps: number; gaming_tax_bps: number; default_casino_share_bps: number };
+type Adjustment = { id: string; adjustment_type: string; amount: number; reference: string | null; notes: string; occurred_at: string };
+type Settlement = {
+  id: string; period_from: string; period_to: string; gross_gaming_revenue: number;
+  provider_share: number; status: string; casino_providers?: { name?: string; code?: string } | null;
+};
+
+const adjustmentTypes = [
+  "payment_fee","provider_fee","gaming_tax","chargeback","refund",
+  "bonus_cost","affiliate_commission","other_cost","other_income",
+] as const;
+
+const emptySummary: Summary = {
+  periodFrom: "", periodTo: "",
+  sportsbook: { stakes: 0, payouts: 0, ggr: 0 },
+  casino: { stakes: 0, payouts: 0, refunds: 0, providerShare: 0, ggr: 0 },
+  aviator: { stakes: 0, payouts: 0, ggr: 0 },
+  deductions: {
+    bonusCost: 0, partnerCommission: 0, paymentFees: 0, providerFees: 0,
+    chargebacks: 0, refunds: 0, gamingTax: 0, otherCost: 0, otherIncome: 0,
+  },
+  deposits: 0, ggr: 0, ngr: 0,
+};
 
 export default function Reports() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [allBets, setAllBets] = useState<any[]>([]);
-  const [allProfiles, setAllProfiles] = useState<any[]>([]);
-  const [reportType, setReportType] = useState("bets");
+  const { toast } = useToast();
   const [dateFrom, setDateFrom] = useState(() => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [financialStats, setFinancialStats] = useState({
-    totalStakes: 0,
-    totalPayouts: 0,
-    netRevenue: 0,
-    avgBetSize: 0,
-  });
-  const [userStats, setUserStats] = useState({
-    totalUsers: 0,
-    activeUsers: 0,
-    newUsers: 0,
-    verifiedUsers: 0,
-  });
-  const [bettingStats, setBettingStats] = useState({
-    totalBets: 0,
-    pendingBets: 0,
-    settledBets: 0,
-    winRate: 0,
-  });
+  const [summary, setSummary] = useState<Summary>(emptySummary);
+  const [settings, setSettings] = useState<Settings>({ payment_fee_bps: 0, gaming_tax_bps: 0, default_casino_share_bps: 1500 });
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [canManage, setCanManage] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [adjustment, setAdjustment] = useState({ type: "payment_fee", amount: "", reference: "", notes: "" });
 
-  useEffect(() => {
-    checkAdmin();
+  const adminFetch = useCallback(async (url: string, init?: RequestInit) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Admin session expired");
+    const response = await fetch(url, {
+      ...init,
+      headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}`, ...(init?.headers || {}) },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || "Finance request failed");
+    return body;
   }, []);
 
-  async function checkAdmin() {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      router.push("/auth/login");
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || !canAccessAdminArea(profile.admin_role, "reports")) {
-      router.push("/");
-      return;
-    }
-
-    setUser(user);
-    loadReports();
-  }
-
-  async function loadReports() {
+  const load = useCallback(async () => {
     setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { await router.replace("/admin/login"); return; }
+      const { data: profile } = await supabase.from("profiles").select("admin_role").eq("id", user.id).single();
+      if (!profile || !canAccessAdminArea(profile.admin_role, "reports")) { await router.replace("/"); return; }
 
-    // Financial stats
-    const { data: bets } = await supabase
-      .from("bets")
-      .select("*");
-
-    if (bets) {
-      setAllBets(bets);
-      const totalStakes = bets.reduce((sum, bet) => sum + Number(bet.stake ?? 0), 0);
-      const totalPayouts = bets
-        .filter((bet) => bet.status === "won")
-        .reduce((sum, bet) => sum + Number(bet.payout ?? 0), 0);
-      const netRevenue = totalStakes - totalPayouts;
-      const avgBetSize = bets.length > 0 ? totalStakes / bets.length : 0;
-
-      setFinancialStats({ totalStakes, totalPayouts, netRevenue, avgBetSize });
-
-      const totalBets = bets.length;
-      const pendingBets = bets.filter((bet) => bet.status === "pending").length;
-      const settledBets = bets.filter((bet) => bet.status !== "pending").length;
-      const wonBets = bets.filter((bet) => bet.status === "won").length;
-      const winRate = settledBets > 0 ? (wonBets / settledBets) * 100 : 0;
-
-      setBettingStats({ totalBets, pendingBets, settledBets, winRate });
-    }
-
-    // User stats
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("*");
-
-    if (profiles) {
-      setAllProfiles(profiles);
-      const totalUsers = profiles.length;
-      const verifiedUsers = profiles.filter(p => p.kyc_status === "approved").length;
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const newUsers = profiles.filter(
-        p => new Date(p.created_at) > thirtyDaysAgo
-      ).length;
-
-      setUserStats({
-        totalUsers,
-        activeUsers: totalUsers,
-        newUsers,
-        verifiedUsers,
+      const from = new Date(`${dateFrom}T00:00:00.000Z`).toISOString();
+      const to = new Date(`${dateTo}T23:59:59.999Z`).toISOString();
+      const body = await adminFetch(`/api/admin/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      setSummary(body.summary || emptySummary);
+      setSettings(body.settings || settings);
+      setAdjustments(body.adjustments || []);
+      setSettlements(body.settlements || []);
+      setCanManage(Boolean(body.canManage));
+    } catch (error) {
+      toast({
+        title: "Revenue report could not be loaded",
+        description: error instanceof Error ? error.message : "Run the revenue accounting migration first.",
+        variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
+  }, [adminFetch, dateFrom, dateTo, router, toast]);
 
-    setLoading(false);
+  useEffect(() => { void load(); }, [load]);
+
+  async function saveSettings() {
+    try {
+      await adminFetch("/api/admin/revenue", {
+        method: "PATCH",
+        body: JSON.stringify({
+          paymentFeeBps: Number(settings.payment_fee_bps),
+          gamingTaxBps: Number(settings.gaming_tax_bps),
+          defaultCasinoShareBps: Number(settings.default_casino_share_bps),
+        }),
+      });
+      toast({ title: "Finance settings saved" });
+      await load();
+    } catch (error) {
+      toast({ title: "Settings were not saved", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
+    }
   }
 
-  const dateFilteredBets = useMemo(() => filterByDate(allBets, dateFrom, dateTo), [allBets, dateFrom, dateTo]);
-  const dateFilteredProfiles = useMemo(() => filterByDate(allProfiles, dateFrom, dateTo), [allProfiles, dateFrom, dateTo]);
-  const customRows = reportType === "users" ? dateFilteredProfiles : dateFilteredBets;
-
-  const downloadReport = (type: string) => {
-    if (!type.includes("CSV")) {
-      window.print();
+  async function addAdjustment() {
+    const amount = Number(adjustment.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || adjustment.notes.trim().length < 3) {
+      toast({ title: "Enter a positive amount and a clear note", variant: "destructive" });
       return;
     }
-    if (type.startsWith("Users")) {
-      downloadCsv("users-report.csv", ["id", "email", "full_name", "kyc_status", "is_suspended", "created_at"], allProfiles);
-    } else if (type.startsWith("Betting")) {
-      downloadCsv("betting-report.csv", ["id", "user_id", "type", "stake", "total_odds", "potential_return", "status", "payout", "created_at"], allBets);
-    } else if (type.startsWith("Financial")) {
-      downloadCsv("financial-report.csv", ["id", "user_id", "stake", "payout", "status", "created_at"], allBets);
-    } else {
-      downloadCsv("platform-report.csv", ["metric", "value"], [
-        { metric: "total_stakes", value: financialStats.totalStakes },
-        { metric: "total_payouts", value: financialStats.totalPayouts },
-        { metric: "net_revenue", value: financialStats.netRevenue },
-        { metric: "total_bets", value: bettingStats.totalBets },
-        { metric: "total_users", value: userStats.totalUsers },
-      ]);
+    try {
+      await adminFetch("/api/admin/revenue", {
+        method: "POST",
+        body: JSON.stringify({
+          resource: "adjustment", type: adjustment.type, amount,
+          reference: adjustment.reference.trim() || null, notes: adjustment.notes.trim(),
+        }),
+      });
+      setAdjustment({ type: "payment_fee", amount: "", reference: "", notes: "" });
+      toast({ title: "Finance entry recorded" });
+      await load();
+    } catch (error) {
+      toast({ title: "Entry was not recorded", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
     }
-  };
+  }
 
-  const downloadCustomReport = () => {
-    if (reportType === "users") {
-      downloadCsv(`users-${dateFrom}-to-${dateTo}.csv`, ["id", "email", "full_name", "country", "kyc_status", "is_suspended", "created_at"], customRows);
-    } else if (reportType === "financial") {
-      downloadCsv(`financial-${dateFrom}-to-${dateTo}.csv`, ["id", "user_id", "stake", "payout", "status", "created_at"], customRows);
-    } else {
-      downloadCsv(`bets-${dateFrom}-to-${dateTo}.csv`, ["id", "user_id", "type", "stake", "total_odds", "potential_return", "status", "payout", "created_at"], customRows);
+  async function generateSettlements() {
+    try {
+      await adminFetch("/api/admin/revenue", {
+        method: "POST",
+        body: JSON.stringify({
+          resource: "casino_settlements",
+          from: new Date(`${dateFrom}T00:00:00.000Z`).toISOString(),
+          to: new Date(`${dateTo}T23:59:59.999Z`).toISOString(),
+        }),
+      });
+      toast({ title: "Casino provider settlements generated" });
+      await load();
+    } catch (error) {
+      toast({ title: "Settlements were not generated", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
     }
-  };
+  }
 
-  return (
-    <AdminLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold mb-1 flex items-center gap-2">
-              <BarChart3 className="h-6 w-6 text-primary" />
-              Reports & Analytics
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              View platform performance and export reports
-            </p>
-          </div>
-          <Button className="gap-2" onClick={() => downloadReport("All CSV")}>
-            <Download className="h-4 w-4" />
-            Export All
-          </Button>
-        </div>
+  function exportCsv() {
+    const rows = [
+      ["metric","amount"],
+      ["sportsbook_stakes",summary.sportsbook.stakes],["sportsbook_payouts",summary.sportsbook.payouts],["sportsbook_ggr",summary.sportsbook.ggr],
+      ["casino_stakes",summary.casino.stakes],["casino_payouts",summary.casino.payouts],["casino_refunds",summary.casino.refunds || 0],["casino_ggr",summary.casino.ggr],
+      ["aviator_stakes",summary.aviator.stakes],["aviator_payouts",summary.aviator.payouts],["aviator_ggr",summary.aviator.ggr],
+      ["bonus_cost",summary.deductions.bonusCost],["partner_commission",summary.deductions.partnerCommission],
+      ["payment_fees",summary.deductions.paymentFees],["provider_share",summary.casino.providerShare || 0],
+      ["provider_fees",summary.deductions.providerFees],["chargebacks",summary.deductions.chargebacks],
+      ["refunds",summary.deductions.refunds],["gaming_tax",summary.deductions.gamingTax],
+      ["other_cost",summary.deductions.otherCost],["other_income",summary.deductions.otherIncome],
+      ["ggr",summary.ggr],["ngr",summary.ngr],
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = `revenue-${dateFrom}-to-${dateTo}.csv`; link.click();
+    URL.revokeObjectURL(url);
+  }
 
-        {/* Overview Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="surface">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <DollarSign className="h-5 w-5 text-success" />
-                <Badge className="bg-success/10 text-success border-success/30">Revenue</Badge>
-              </div>
-              <div className="text-2xl font-bold font-mono">${financialStats.netRevenue.toFixed(0)}</div>
-              <div className="text-xs text-muted-foreground mt-1">Net Revenue</div>
-            </CardContent>
-          </Card>
-
-          <Card className="surface">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <Users className="h-5 w-5 text-primary" />
-                <Badge className="badge-popular">Users</Badge>
-              </div>
-              <div className="text-2xl font-bold">{userStats.totalUsers}</div>
-              <div className="text-xs text-muted-foreground mt-1">Total Users</div>
-            </CardContent>
-          </Card>
-
-          <Card className="surface">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <Receipt className="h-5 w-5 text-warning" />
-                <Badge className="badge-featured">Bets</Badge>
-              </div>
-              <div className="text-2xl font-bold">{bettingStats.totalBets}</div>
-              <div className="text-xs text-muted-foreground mt-1">Total Bets</div>
-            </CardContent>
-          </Card>
-
-          <Card className="surface">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <TrendingUp className="h-5 w-5 text-success" />
-                <Badge variant="outline">Win Rate</Badge>
-              </div>
-              <div className="text-2xl font-bold">{bettingStats.winRate.toFixed(1)}%</div>
-              <div className="text-xs text-muted-foreground mt-1">User Wins</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Report Tabs */}
-        <Tabs defaultValue="financial">
-          <TabsList className="bg-surface">
-            <TabsTrigger value="financial">Financial</TabsTrigger>
-            <TabsTrigger value="betting">Betting Activity</TabsTrigger>
-            <TabsTrigger value="users">User Analytics</TabsTrigger>
-            <TabsTrigger value="custom">Custom Reports</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="financial">
-            <div className="grid gap-4">
-              <Card className="surface">
-                <CardHeader>
-                  <CardTitle className="text-lg">Financial Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Total Stakes</div>
-                      <div className="text-xl font-bold font-mono">${financialStats.totalStakes.toFixed(2)}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Total Payouts</div>
-                      <div className="text-xl font-bold font-mono text-danger">${financialStats.totalPayouts.toFixed(2)}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Net Revenue</div>
-                      <div className="text-xl font-bold font-mono text-success">${financialStats.netRevenue.toFixed(2)}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-1">Avg Bet Size</div>
-                      <div className="text-xl font-bold font-mono">${financialStats.avgBetSize.toFixed(2)}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 mt-6">
-                    <Button variant="outline" size="sm" className="gap-2" onClick={() => downloadReport("Financial")}>
-                      <Download className="h-4 w-4" />
-                      Download PDF
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-2" onClick={() => downloadReport("Financial CSV")}>
-                      <FileText className="h-4 w-4" />
-                      Export CSV
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="betting">
-            <Card className="surface">
-              <CardHeader>
-                <CardTitle className="text-lg">Betting Activity Report</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Total Bets</div>
-                    <div className="text-xl font-bold">{bettingStats.totalBets}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Pending</div>
-                    <div className="text-xl font-bold text-warning">{bettingStats.pendingBets}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Settled</div>
-                    <div className="text-xl font-bold">{bettingStats.settledBets}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Win Rate</div>
-                    <div className="text-xl font-bold text-success">{bettingStats.winRate.toFixed(1)}%</div>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="gap-2" onClick={() => downloadReport("Betting")}>
-                    <Download className="h-4 w-4" />
-                    Download PDF
-                  </Button>
-                  <Button variant="outline" size="sm" className="gap-2" onClick={() => downloadReport("Betting CSV")}>
-                    <FileText className="h-4 w-4" />
-                    Export CSV
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="users">
-            <Card className="surface">
-              <CardHeader>
-                <CardTitle className="text-lg">User Analytics Report</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Total Users</div>
-                    <div className="text-xl font-bold">{userStats.totalUsers}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Active Users</div>
-                    <div className="text-xl font-bold text-success">{userStats.activeUsers}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">New (30d)</div>
-                    <div className="text-xl font-bold text-primary">{userStats.newUsers}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Verified</div>
-                    <div className="text-xl font-bold text-success">{userStats.verifiedUsers}</div>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="gap-2" onClick={() => downloadReport("Users")}>
-                    <Download className="h-4 w-4" />
-                    Download PDF
-                  </Button>
-                  <Button variant="outline" size="sm" className="gap-2" onClick={() => downloadReport("Users CSV")}>
-                    <FileText className="h-4 w-4" />
-                    Export CSV
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="custom">
-            <Card className="surface">
-              <CardHeader>
-                <CardTitle className="text-lg">Custom Report Builder</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-5">
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="grid gap-2"><Label>Report</Label><Select value={reportType} onValueChange={setReportType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bets">Betting activity</SelectItem><SelectItem value="financial">Financial bets</SelectItem><SelectItem value="users">New users</SelectItem></SelectContent></Select></div>
-                    <div className="grid gap-2"><Label htmlFor="report-from">From</Label><Input id="report-from" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></div>
-                    <div className="grid gap-2"><Label htmlFor="report-to">To</Label><Input id="report-to" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></div>
-                  </div>
-                  <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3"><Calendar className="h-8 w-8 text-primary" /><div><div className="font-medium">{customRows.length} matching records</div><div className="text-xs text-muted-foreground">{dateFrom} through {dateTo}, inclusive</div></div></div>
-                    <Button className="gap-2" onClick={downloadCustomReport} disabled={loading || !customRows.length}><Download className="h-4 w-4" />Generate CSV</Button>
-                  </div>
-                  <div className="overflow-x-auto rounded-lg border border-border">
-                    <table className="w-full text-sm"><thead className="bg-muted/50"><tr><th className="p-3 text-left">ID</th><th className="p-3 text-left">Type / Email</th><th className="p-3 text-left">Status</th><th className="p-3 text-right">Amount</th><th className="p-3 text-left">Created</th></tr></thead><tbody>{customRows.slice(0, 10).map((row) => <tr key={row.id} className="border-t border-border"><td className="max-w-40 truncate p-3 font-mono text-xs">{row.id}</td><td className="p-3">{reportType === "users" ? row.email : row.type}</td><td className="p-3">{reportType === "users" ? row.kyc_status : row.status}</td><td className="p-3 text-right font-mono">{reportType === "users" ? "—" : `$${Number(row.stake || 0).toFixed(2)}`}</td><td className="p-3 text-xs">{row.created_at ? new Date(row.created_at).toLocaleString() : "—"}</td></tr>)}</tbody></table>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+  return <AdminLayout><div className="space-y-6">
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div><h1 className="flex items-center gap-2 text-2xl font-bold"><BarChart3 className="h-6 w-6 text-primary"/>Revenue & Finance</h1><p className="mt-1 text-sm text-muted-foreground">Auditable sportsbook, casino and Aviator GGR/NGR reporting</p></div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 text-xs"><span>From</span><Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)}/></label>
+        <label className="grid gap-1 text-xs"><span>To</span><Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)}/></label>
+        <Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`}/>Refresh</Button>
+        <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4"/>CSV</Button>
       </div>
-    </AdminLayout>
-  );
+    </div>
+
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Metric title="Total stakes" value={summary.sportsbook.stakes+summary.casino.stakes+summary.aviator.stakes} note="Settled wagers"/>
+      <Metric title="GGR" value={summary.ggr} note="Stakes minus payouts"/>
+      <Metric title="Total deductions" value={totalDeductions(summary)} note="Fees, bonuses, tax and partners"/>
+      <Metric title="NGR" value={summary.ngr} note="Actual net gaming revenue" accent={summary.ngr >= 0 ? "success" : "danger"}/>
+    </div>
+
+    <Tabs defaultValue="breakdown">
+      <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="breakdown">Revenue breakdown</TabsTrigger><TabsTrigger value="deductions">Deductions</TabsTrigger><TabsTrigger value="settlements">Casino settlements</TabsTrigger>{canManage && <TabsTrigger value="settings">Finance controls</TabsTrigger>}</TabsList>
+
+      <TabsContent value="breakdown" className="space-y-4">
+        <div className="grid gap-4 lg:grid-cols-3">
+          <RevenueCard title="Sportsbook" data={summary.sportsbook}/>
+          <RevenueCard title="Casino" data={summary.casino}/>
+          <RevenueCard title="Aviator" data={summary.aviator}/>
+        </div>
+        <Card><CardHeader><CardTitle className="text-base">Revenue formula</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">GGR = settled stakes − payouts − game refunds. NGR = GGR + other income − bonuses − partner commissions − provider share − payment/provider fees − chargebacks/refunds − gaming tax − other costs.</CardContent></Card>
+      </TabsContent>
+
+      <TabsContent value="deductions">
+        <Card><CardHeader><CardTitle>Deductions for selected period</CardTitle></CardHeader><CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {Object.entries({
+              "Bonus cost":summary.deductions.bonusCost,"Partner commission":summary.deductions.partnerCommission,
+              "Casino provider share":summary.casino.providerShare || 0,"Payment fees":summary.deductions.paymentFees,
+              "Provider fees":summary.deductions.providerFees,"Chargebacks":summary.deductions.chargebacks,
+              "Refunds":summary.deductions.refunds,"Gaming tax":summary.deductions.gamingTax,
+              "Other costs":summary.deductions.otherCost,"Other income":summary.deductions.otherIncome,
+            }).map(([label,value]) => <div key={label} className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 font-mono text-lg font-bold">{money(value)}</div></div>)}
+          </div>
+          <div className="mt-6 overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/40"><tr><th className="p-3 text-left">Date</th><th className="p-3 text-left">Type</th><th className="p-3 text-left">Reference / note</th><th className="p-3 text-right">Amount</th></tr></thead><tbody>{adjustments.map((row) => <tr key={row.id} className="border-t"><td className="p-3">{new Date(row.occurred_at).toLocaleString()}</td><td className="p-3"><Badge variant="outline">{row.adjustment_type.replaceAll("_"," ")}</Badge></td><td className="p-3">{row.reference || row.notes}</td><td className="p-3 text-right font-mono">{money(row.amount)}</td></tr>)}{adjustments.length===0 && <tr><td className="p-8 text-center text-muted-foreground" colSpan={4}>No manual finance entries in this period.</td></tr>}</tbody></table></div>
+        </CardContent></Card>
+      </TabsContent>
+
+      <TabsContent value="settlements">
+        <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>Casino provider settlements</CardTitle>{canManage && <Button onClick={() => void generateSettlements()}><Calculator className="mr-2 h-4 w-4"/>Generate selected period</Button>}</div></CardHeader><CardContent>
+          <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/40"><tr><th className="p-3 text-left">Provider</th><th className="p-3 text-left">Period</th><th className="p-3 text-right">GGR</th><th className="p-3 text-right">Provider share</th><th className="p-3 text-left">Status</th></tr></thead><tbody>{settlements.map((row) => <tr key={row.id} className="border-t"><td className="p-3">{row.casino_providers?.name || row.casino_providers?.code || "Provider"}</td><td className="p-3 text-xs">{new Date(row.period_from).toLocaleDateString()} – {new Date(row.period_to).toLocaleDateString()}</td><td className="p-3 text-right font-mono">{money(row.gross_gaming_revenue)}</td><td className="p-3 text-right font-mono">{money(row.provider_share)}</td><td className="p-3"><Badge variant="outline">{row.status}</Badge></td></tr>)}{settlements.length===0 && <tr><td className="p-8 text-center text-muted-foreground" colSpan={5}>No settlements generated yet.</td></tr>}</tbody></table></div>
+        </CardContent></Card>
+      </TabsContent>
+
+      {canManage && <TabsContent value="settings" className="space-y-4">
+        <Card><CardHeader><CardTitle>Automatic finance rates</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-3">
+          <RateInput label="Payment fee %" value={settings.payment_fee_bps} onChange={(value) => setSettings({...settings,payment_fee_bps:value})}/>
+          <RateInput label="Gaming tax %" value={settings.gaming_tax_bps} onChange={(value) => setSettings({...settings,gaming_tax_bps:value})}/>
+          <RateInput label="Default casino share %" value={settings.default_casino_share_bps} onChange={(value) => setSettings({...settings,default_casino_share_bps:value})}/>
+          <Button className="w-fit md:col-span-3" onClick={() => void saveSettings()}><Save className="mr-2 h-4 w-4"/>Save rates</Button>
+        </CardContent></Card>
+        <Card><CardHeader><CardTitle>Record finance adjustment</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2"><Label>Type</Label><Select value={adjustment.type} onValueChange={(type) => setAdjustment({...adjustment,type})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{adjustmentTypes.map((type) => <SelectItem key={type} value={type}>{type.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></div>
+          <div className="grid gap-2"><Label>Amount (USD)</Label><Input type="number" min="0.01" step="0.01" value={adjustment.amount} onChange={(event) => setAdjustment({...adjustment,amount:event.target.value})}/></div>
+          <div className="grid gap-2"><Label>Reference</Label><Input value={adjustment.reference} onChange={(event) => setAdjustment({...adjustment,reference:event.target.value})} placeholder="Invoice / transaction ID"/></div>
+          <div className="grid gap-2"><Label>Audit note</Label><Input value={adjustment.notes} onChange={(event) => setAdjustment({...adjustment,notes:event.target.value})} placeholder="Why this entry was recorded"/></div>
+          <Button className="w-fit xl:col-span-4" onClick={() => void addAdjustment()}><WalletCards className="mr-2 h-4 w-4"/>Record entry</Button>
+        </CardContent></Card>
+      </TabsContent>}
+    </Tabs>
+  </div></AdminLayout>;
 }
 
-function filterByDate(rows: any[], from: string, to: string) {
-  const start = new Date(`${from}T00:00:00`).getTime();
-  const end = new Date(`${to}T23:59:59.999`).getTime();
-  return rows.filter((row) => {
-    const created = new Date(row.created_at).getTime();
-    return Number.isFinite(created) && created >= start && created <= end;
-  });
+function Metric({ title, value, note, accent }: { title: string; value: number; note: string; accent?: "success" | "danger" }) {
+  return <Card><CardContent className="p-5"><div className="text-xs text-muted-foreground">{title}</div><div className={`mt-2 font-mono text-2xl font-bold ${accent==="success"?"text-success":accent==="danger"?"text-danger":""}`}>{money(value)}</div><div className="mt-1 text-xs text-muted-foreground">{note}</div></CardContent></Card>;
 }
-
-function downloadCsv(filename: string, columns: string[], rows: any[]) {
-  const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
-  const csv = [columns.map(escape).join(","), ...rows.map((row) => columns.map((column) => escape(row[column])).join(","))].join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
+function RevenueCard({ title, data }: { title: string; data: RevenueGroup }) {
+  return <Card><CardHeader><CardTitle>{title}</CardTitle></CardHeader><CardContent className="space-y-3 text-sm"><Line label="Stakes" value={data.stakes}/><Line label="Payouts" value={data.payouts}/>{Boolean(data.refunds) && <Line label="Game refunds" value={data.refunds || 0}/>}<div className="border-t pt-3"><Line label="GGR" value={data.ggr} strong/></div></CardContent></Card>;
+}
+function Line({ label, value, strong }: { label: string; value: number; strong?: boolean }) {
+  return <div className="flex items-center justify-between gap-4"><span className={strong?"font-semibold":"text-muted-foreground"}>{label}</span><span className={`font-mono ${strong?"font-bold":""}`}>{money(value)}</span></div>;
+}
+function RateInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return <div className="grid gap-2"><Label>{label}</Label><Input type="number" min="0" max="100" step="0.01" value={value/100} onChange={(event) => onChange(Math.round(Number(event.target.value || 0)*100))}/></div>;
+}
+function money(value: unknown) { const number=Number(value || 0); return `${number<0?"-":""}$${Math.abs(number).toFixed(2)}`; }
+function totalDeductions(summary: Summary) {
+  const d=summary.deductions;
+  return d.bonusCost+d.partnerCommission+(summary.casino.providerShare||0)+d.paymentFees+d.providerFees+d.chargebacks+d.refunds+d.gamingTax+d.otherCost-d.otherIncome;
 }
