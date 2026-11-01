@@ -211,7 +211,10 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
           <div className="text-sm text-center text-muted-foreground">
-            New accounts are created by an administrator.
+            New to PrimeBet?{" "}
+            <Link href="/auth/register" className="text-primary hover:underline">
+              Create an account
+            </Link>
           </div>
           <Link href="/" className="text-sm text-center text-muted-foreground hover:text-foreground">
             Back to Home
