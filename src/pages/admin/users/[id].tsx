@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { ArrowLeft, Calendar, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowLeft, Calendar, ShieldCheck, Trash2, Wallet } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 
 type UserDetails = {
+  requesterRole: string;
   profile: {
     id: string;
     email: string;
@@ -135,6 +136,48 @@ export default function AdminUserDetailsPage() {
     }
   }
 
+  async function permanentlyDeleteUser() {
+    if (!details || details.requesterRole !== "super_admin") return;
+    if (controlReason.trim().length < 5) {
+      toast({ title: "Reason required", description: "Enter an audit reason of at least 5 characters.", variant: "destructive" });
+      return;
+    }
+
+    const confirmation = window.prompt(
+      `Permanent deletion cannot be undone. Type ${details.profile.email} to confirm.`
+    );
+    if (confirmation?.trim().toLowerCase() !== details.profile.email.toLowerCase()) {
+      if (confirmation !== null) {
+        toast({ title: "Deletion cancelled", description: "The email confirmation did not match.", variant: "destructive" });
+      }
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await adminFetch(
+        "/api/admin/users/" + details.profile.id + "/permanent-delete",
+        {
+          method: "DELETE",
+          body: JSON.stringify({
+            confirmation: confirmation.trim(),
+            reason: controlReason.trim(),
+          }),
+        }
+      );
+      toast({ title: "User permanently deleted", description: result.message });
+      await router.push("/admin/users");
+    } catch (error) {
+      toast({
+        title: "Permanent deletion failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -195,6 +238,24 @@ export default function AdminUserDetailsPage() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">Archive is recoverable and preserves transaction, bet and audit history.</p>
+                {details.requesterRole === "super_admin" && (
+                  <div className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="font-semibold text-destructive">Permanent deletion</div>
+                      <p className="text-xs text-muted-foreground">
+                        Only available for empty/test accounts with zero balance and no bets or financial history.
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      disabled={saving}
+                      onClick={() => void permanentlyDeleteUser()}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Permanently Delete
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
