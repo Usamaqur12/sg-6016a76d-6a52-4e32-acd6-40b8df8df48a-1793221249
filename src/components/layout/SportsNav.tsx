@@ -192,7 +192,7 @@ export function SportsNav() {
                     {sport.leagues && isExpanded && (
                       <div className="mt-0.5 ml-3 space-y-0.5 animate-slide-down">
                         {sport.leagues.map((league) => (
-                          <Link key={league.name} href={`/${sport.id}`}>
+                          <Link key={league.name} href={`/sports?sport=${encodeURIComponent(sport.id)}&league=${encodeURIComponent(league.name)}`}>
                             <button className="w-full flex items-center justify-between px-2.5 py-1 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-surface-elevated transition-all duration-150">
                               <span className="truncate">{league.name}</span>
                               <span className="text-[10px] font-mono ml-1 flex-shrink-0">{league.count}</span>
