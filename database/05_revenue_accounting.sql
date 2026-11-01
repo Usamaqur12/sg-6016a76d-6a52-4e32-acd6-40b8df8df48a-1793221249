@@ -271,7 +271,34 @@ BEGIN
 END;
 $$;
 
+
+CREATE OR REPLACE FUNCTION public.reprice_sport_odds(p_sport_id UUID)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=public
+AS $
+DECLARE v_count INTEGER;
+BEGIN
+  IF NOT public.has_admin_role(ARRAY['super_admin','admin','sports_trader']) THEN
+    RAISE EXCEPTION 'Trading authorization required';
+  END IF;
+  UPDATE public.odds o
+  SET value=ROUND(GREATEST(1.01,o.provider_odds/(1+(LEAST(50,GREATEST(0,sc.default_margin))/100.0))),3),
+      updated_at=NOW()
+  FROM public.markets m
+  JOIN public.events e ON e.id=m.event_id
+  JOIN public.sport_config sc ON sc.sport_id=e.sport_id
+  WHERE o.market_id=m.id AND e.sport_id=p_sport_id
+    AND o.provider_odds IS NOT NULL AND o.provider_odds>=1.01 AND COALESCE(o.is_locked,FALSE)=FALSE;
+  GET DIAGNOSTICS v_count=ROW_COUNT;
+  RETURN v_count;
+END;
+$;
+
 REVOKE ALL ON FUNCTION public.apply_configured_sport_margin() FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.reprice_sport_odds(UUID) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.reprice_sport_odds(UUID) TO authenticated;
 REVOKE ALL ON FUNCTION public.create_casino_provider_settlements(TIMESTAMPTZ,TIMESTAMPTZ,UUID) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.get_finance_summary(TIMESTAMPTZ,TIMESTAMPTZ) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.create_casino_provider_settlements(TIMESTAMPTZ,TIMESTAMPTZ,UUID) TO service_role;
