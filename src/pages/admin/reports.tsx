@@ -26,7 +26,7 @@ type Settings = { payment_fee_bps: number; gaming_tax_bps: number; default_casin
 type Adjustment = { id: string; adjustment_type: string; amount: number; reference: string | null; notes: string; occurred_at: string };
 type Settlement = {
   id: string; period_from: string; period_to: string; gross_gaming_revenue: number;
-  provider_share: number; status: string; casino_providers?: { name?: string; code?: string } | null;
+  provider_share: number; status: string; payment_reference?: string | null; casino_providers?: { name?: string; code?: string } | null;
 };
 
 const adjustmentTypes = [
@@ -156,6 +156,21 @@ export default function Reports() {
     }
   }
 
+  async function updateSettlement(id: string, status: "approved" | "paid" | "disputed") {
+    const paymentReference = status === "paid" ? window.prompt("Enter provider payment reference")?.trim() : null;
+    if (status === "paid" && !paymentReference) return;
+    try {
+      await adminFetch("/api/admin/revenue", {
+        method: "PATCH",
+        body: JSON.stringify({ resource: "settlement_status", id, status, paymentReference: paymentReference || null }),
+      });
+      toast({ title: `Settlement ${status}` });
+      await load();
+    } catch (error) {
+      toast({ title: "Settlement was not updated", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
+    }
+  }
+
   function exportCsv() {
     const rows = [
       ["metric","amount"],
@@ -223,7 +238,7 @@ export default function Reports() {
 
       <TabsContent value="settlements">
         <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>Casino provider settlements</CardTitle>{canManage && <Button onClick={() => void generateSettlements()}><Calculator className="mr-2 h-4 w-4"/>Generate selected period</Button>}</div></CardHeader><CardContent>
-          <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/40"><tr><th className="p-3 text-left">Provider</th><th className="p-3 text-left">Period</th><th className="p-3 text-right">GGR</th><th className="p-3 text-right">Provider share</th><th className="p-3 text-left">Status</th></tr></thead><tbody>{settlements.map((row) => <tr key={row.id} className="border-t"><td className="p-3">{row.casino_providers?.name || row.casino_providers?.code || "Provider"}</td><td className="p-3 text-xs">{new Date(row.period_from).toLocaleDateString()} – {new Date(row.period_to).toLocaleDateString()}</td><td className="p-3 text-right font-mono">{money(row.gross_gaming_revenue)}</td><td className="p-3 text-right font-mono">{money(row.provider_share)}</td><td className="p-3"><Badge variant="outline">{row.status}</Badge></td></tr>)}{settlements.length===0 && <tr><td className="p-8 text-center text-muted-foreground" colSpan={5}>No settlements generated yet.</td></tr>}</tbody></table></div>
+          <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/40"><tr><th className="p-3 text-left">Provider</th><th className="p-3 text-left">Period</th><th className="p-3 text-right">GGR</th><th className="p-3 text-right">Provider share</th><th className="p-3 text-left">Status</th><th className="p-3 text-right">Actions</th></tr></thead><tbody>{settlements.map((row) => <tr key={row.id} className="border-t"><td className="p-3">{row.casino_providers?.name || row.casino_providers?.code || "Provider"}</td><td className="p-3 text-xs">{new Date(row.period_from).toLocaleDateString()} – {new Date(row.period_to).toLocaleDateString()}</td><td className="p-3 text-right font-mono">{money(row.gross_gaming_revenue)}</td><td className="p-3 text-right font-mono">{money(row.provider_share)}</td><td className="p-3"><Badge variant="outline">{row.status}</Badge>{row.payment_reference && <div className="mt-1 text-xs text-muted-foreground">{row.payment_reference}</div>}</td><td className="p-3"><div className="flex justify-end gap-2">{canManage && row.status==="draft" && <><Button size="sm" onClick={() => void updateSettlement(row.id,"approved")}>Approve</Button><Button size="sm" variant="outline" onClick={() => void updateSettlement(row.id,"disputed")}>Dispute</Button></>}{canManage && row.status==="approved" && <Button size="sm" onClick={() => void updateSettlement(row.id,"paid")}>Mark paid</Button>}</div></td></tr>)}{settlements.length===0 && <tr><td className="p-8 text-center text-muted-foreground" colSpan={6}>No settlements generated yet.</td></tr>}</tbody></table></div>
         </CardContent></Card>
       </TabsContent>
 
