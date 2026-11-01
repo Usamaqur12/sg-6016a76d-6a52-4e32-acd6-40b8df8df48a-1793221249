@@ -45,7 +45,6 @@ DECLARE
   v_transactions INTEGER:=0;
   v_broker_id UUID;
 BEGIN
-  IF NOT public.is_service_role() THEN RAISE EXCEPTION 'Service authorization required'; END IF;
   IF char_length(btrim(COALESCE(p_reason,'')))<5 THEN RAISE EXCEPTION 'A deletion reason is required'; END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.profiles
