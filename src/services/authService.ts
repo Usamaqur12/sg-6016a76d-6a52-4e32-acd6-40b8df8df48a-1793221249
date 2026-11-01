@@ -6,6 +6,7 @@ export interface AuthUser {
   email: string;
   user_metadata?: any;
   created_at?: string;
+  email_confirmed_at?: string;
 }
 
 export interface AuthError {
@@ -78,7 +79,8 @@ export const authService = {
       id: user.id,
       email: user.email || "",
       user_metadata: user.user_metadata,
-      created_at: user.created_at
+      created_at: user.created_at,
+      email_confirmed_at: user.email_confirmed_at
     } : null;
   },
 
@@ -89,13 +91,14 @@ export const authService = {
   },
 
   // Sign up with email and password
-  async signUp(email: string, password: string): Promise<{ user: AuthUser | null; session: Session | null; error: AuthError | null }> {
+  async signUp(email: string, password: string, metadata?: { full_name?: string; signup_source?: "public" }): Promise<{ user: AuthUser | null; session: Session | null; error: AuthError | null }> {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${getURL()}/auth/login?confirmed=1`
+          emailRedirectTo: `${getURL()}/auth/login?confirmed=1`,
+          data: metadata
         }
       });
 
@@ -103,8 +106,9 @@ export const authService = {
         return { user: null, session: null, error: { message: error.message, code: error.status?.toString() } };
       }
 
-      // Ensure profile exists if user was created
-      if (data.user) {
+      // With mandatory email confirmation, public signup has no session yet.
+      // Profile creation is deferred until the verified user signs in.
+      if (data.user && data.session) {
         const profileError = await ensureUserProfile(data.user);
         if (profileError) {
           return { user: null, session: null, error: profileError };
@@ -115,7 +119,8 @@ export const authService = {
         id: data.user.id,
         email: data.user.email || "",
         user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
+        created_at: data.user.created_at,
+        email_confirmed_at: data.user.email_confirmed_at
       } : null;
 
       return { user: authUser, session: data.session, error: null };
@@ -152,7 +157,8 @@ export const authService = {
         id: data.user.id,
         email: data.user.email || "",
         user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
+        created_at: data.user.created_at,
+        email_confirmed_at: data.user.email_confirmed_at
       } : null;
 
       return { user: authUser, session: data.session, error: null };
@@ -217,7 +223,8 @@ export const authService = {
         id: data.user.id,
         email: data.user.email || "",
         user_metadata: data.user.user_metadata,
-        created_at: data.user.created_at
+        created_at: data.user.created_at,
+        email_confirmed_at: data.user.email_confirmed_at
       } : null;
 
       return { user: authUser, error: null };
