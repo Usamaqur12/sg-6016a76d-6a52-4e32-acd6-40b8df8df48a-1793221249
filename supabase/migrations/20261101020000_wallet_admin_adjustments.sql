@@ -1,7 +1,6 @@
 -- Remove unfunded legacy play-money balances and support audited signed adjustments.
 
 ALTER TABLE public.profiles ALTER COLUMN demo_balance SET DEFAULT 0.00;
-ALTER TABLE public.wallet_accounts ALTER COLUMN balance SET DEFAULT 0.00;
 
 ALTER TABLE public.admin_balance_adjustments
   DROP CONSTRAINT IF EXISTS admin_balance_adjustments_amount_check;
@@ -78,10 +77,6 @@ BEGIN
     UPDATE public.profiles
     SET demo_balance = 0, updated_at = NOW()
     WHERE id = v_user.id;
-
-    UPDATE public.wallet_accounts
-    SET balance = 0, updated_at = NOW()
-    WHERE user_id = v_user.id;
   END LOOP;
 END;
 $$;

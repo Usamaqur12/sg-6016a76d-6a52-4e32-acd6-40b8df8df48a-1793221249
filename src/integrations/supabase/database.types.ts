@@ -3436,6 +3436,7 @@ export type Database = {
       is_aal2: { Args: never; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
       is_service_role: { Args: never; Returns: boolean }
+      is_super_admin: { Args: never; Returns: boolean }
       link_my_broker: { Args: { p_broker_code: string }; Returns: Json }
       place_bet: {
         Args: {
