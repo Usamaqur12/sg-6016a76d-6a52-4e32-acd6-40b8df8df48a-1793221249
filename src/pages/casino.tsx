@@ -255,8 +255,8 @@ export default function CasinoPage() {
                 {casinoEnabled ? "Licensed-provider catalogue connection is active" : "Casino games currently unavailable"}
               </p>
               {!user && (
-                <Button size="lg" className="bg-gold hover:bg-gold/90 text-background" onClick={() => void router.push("/auth/register?returnTo=/casino")}>
-                  Sign Up to Play
+                <Button size="lg" className="bg-gold hover:bg-gold/90 text-background" onClick={() => void router.push("/auth/login?returnTo=/casino")}>
+                  Log In to Play
                 </Button>
               )}
             </div>
