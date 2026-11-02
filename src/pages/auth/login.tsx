@@ -52,16 +52,14 @@ export default function LoginPage() {
 
       const { data: account } = await (supabase as any)
         .from("profiles")
-        .select("is_suspended,account_status,kyc_status")
+        .select("is_suspended,account_status")
         .eq("id", user.id)
         .maybeSingle();
       if (account?.is_suspended || account?.account_status === "closed") {
         await supabase.auth.signOut();
         throw new Error("This account is disabled. Contact support.");
       }
-      const destination = account?.account_status === "pending_kyc"
-        ? "/account/kyc?activation=required"
-        : "/";
+      const destination = "/";
       setPostLoginDestination(destination);
 
       // Check MFA requirement
