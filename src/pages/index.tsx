@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import type { SportsbookEvent, SportsbookOutcome } from "@/types/sportsbook";
 import Link from "next/link";
 import { getUserFavoriteEventIds, toggleFavorite as persistFavorite } from "@/services/favoritesService";
+import { getMyWalletBalances } from "@/services/walletService";
 import { LiveOddsFeed } from "@/components/sportsbook/LiveOddsFeed";
 import { SEO } from "@/components/SEO";
 
@@ -73,16 +74,9 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadProfile = async (userId: string) => {
-    const { data, error } = await supabase.rpc("get_user_wallet_balance" as any, {
-      p_user_id: userId
-    }) as { data: { cash_balance: number; bonus_balance: number } | null; error: any };
-
-    if (!error && data) {
-      setProfile({ balance: Number(data.cash_balance || 0) + Number(data.bonus_balance || 0) });
-    } else {
-      setProfile({ balance: 0 });
-    }
+  const loadProfile = async (_userId: string) => {
+    const result = await getMyWalletBalances();
+    setProfile({ balance: result.balances?.available || 0 });
   };
 
   function handleOddsClick(event: SportsbookEvent, outcome?: SportsbookOutcome, marketName = "Match Result") {
