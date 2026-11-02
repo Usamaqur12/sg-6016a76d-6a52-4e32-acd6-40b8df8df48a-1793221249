@@ -11,16 +11,71 @@ const requestSchema = z.object({
   idempotencyKey: z.string().uuid(),
 });
 
+type SupabaseFailure = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+function getFailure(error: unknown): SupabaseFailure {
+  if (error instanceof Error) return { message: error.message };
+  if (error && typeof error === "object") {
+    const value = error as Record<string, unknown>;
+    return {
+      code: typeof value.code === "string" ? value.code : undefined,
+      message: typeof value.message === "string" ? value.message : undefined,
+      details: typeof value.details === "string" ? value.details : undefined,
+      hint: typeof value.hint === "string" ? value.hint : undefined,
+    };
+  }
+  return {};
+}
+
+function isMissingRpc(error: unknown, functionName: string) {
+  const failure = getFailure(error);
+  const text = [failure.message, failure.details, failure.hint].filter(Boolean).join(" ").toLowerCase();
+  return failure.code === "PGRST202"
+    || (text.includes(functionName.toLowerCase()) && (
+      text.includes("schema cache")
+      || text.includes("could not find")
+      || text.includes("does not exist")
+    ));
+}
+
+function publicErrorMessage(error: unknown) {
+  const failure = getFailure(error);
+  const text = failure.message || failure.details || "Balance adjustment failed";
+
+  if (isMissingRpc(error, "admin_adjust_user_balance")) {
+    return "Balance adjustment database migration is not installed";
+  }
+  if (/service authorization required/i.test(text)) {
+    return "Server Supabase service key is missing or invalid";
+  }
+  if (/customer account not found/i.test(text)) {
+    return "Customer account was not found";
+  }
+  if (/balance cannot be reduced below zero|insufficient/i.test(text)) {
+    return "Balance cannot be reduced below zero";
+  }
+
+  return text;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
+
   const auth = await requireAdminApi(req, res);
   if (!auth) return;
+
   if (!["super_admin", "admin", "finance"].includes(auth.adminRole)) {
     return res.status(403).json({ error: "Finance authorization required" });
   }
+
   const parsed = requestSchema.safeParse(req.body);
   if (!parsed.success) {
     const reasonIssue = parsed.error.issues.find((issue) => issue.path[0] === "reason");
@@ -33,21 +88,59 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           : "Enter valid balance adjustment details",
     });
   }
-  const signedAmount = parsed.data.operation === "subtract"
-    ? -Math.round(parsed.data.amount * 100) / 100
-    : Math.round(parsed.data.amount * 100) / 100;
+
+  const roundedAmount = Math.round(parsed.data.amount * 100) / 100;
+  const signedAmount = parsed.data.operation === "subtract" ? -roundedAmount : roundedAmount;
+  const rpcArguments = {
+    p_user_id: parsed.data.userId,
+    p_amount: signedAmount,
+    p_reason: parsed.data.reason,
+    p_admin_id: auth.userId,
+    p_idempotency_key: parsed.data.idempotencyKey,
+  };
+
   try {
-    const { data, error } = await supabaseAdmin.rpc("admin_adjust_user_balance", {
-      p_user_id: parsed.data.userId,
-      p_amount: signedAmount,
-      p_reason: parsed.data.reason,
-      p_admin_id: auth.userId,
-      p_idempotency_key: parsed.data.idempotencyKey,
-    });
-    if (error) throw error;
-    return res.status(200).json({ success: true, result: data });
+    const adjustment = await supabaseAdmin.rpc("admin_adjust_user_balance", rpcArguments);
+
+    if (!adjustment.error) {
+      return res.status(200).json({ success: true, result: adjustment.data });
+    }
+
+    // Older production databases may have the original credit-only RPC while
+    // the signed adjustment migration is still being deployed. Keep additions
+    // working through that already-audited, atomic function.
+    if (
+      parsed.data.operation === "add"
+      && isMissingRpc(adjustment.error, "admin_adjust_user_balance")
+    ) {
+      const credit = await supabaseAdmin.rpc("admin_credit_user_balance", {
+        ...rpcArguments,
+        p_amount: roundedAmount,
+      });
+
+      if (!credit.error) {
+        return res.status(200).json({
+          success: true,
+          result: credit.data,
+          compatibilityMode: true,
+        });
+      }
+
+      throw credit.error;
+    }
+
+    throw adjustment.error;
   } catch (error) {
-    console.error("Balance adjustment failed", error);
-    return res.status(500).json({ error: error instanceof Error ? error.message : "Balance adjustment failed" });
+    const failure = getFailure(error);
+    console.error("Balance adjustment failed", {
+      code: failure.code,
+      message: failure.message,
+      details: failure.details,
+      hint: failure.hint,
+    });
+    return res.status(500).json({
+      error: publicErrorMessage(error),
+      code: failure.code,
+    });
   }
 }
