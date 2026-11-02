@@ -277,6 +277,62 @@ BEGIN
   RETURN jsonb_build_object('success',TRUE,'brokerId',v_broker.id,'status',v_broker.status,'brokerCode',v_broker.broker_code);
 END; $$;
 
+DROP FUNCTION IF EXISTS public.submit_manual_deposit_request(UUID,NUMERIC,TEXT,TEXT);
+CREATE OR REPLACE FUNCTION public.submit_manual_deposit_request(
+  p_payment_method_id UUID,p_amount NUMERIC,p_transaction_reference TEXT,p_user_note TEXT DEFAULT NULL,p_proof_file_path TEXT DEFAULT NULL
+) RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE v_user UUID:=auth.uid(); v_method public.payment_methods%ROWTYPE; v_id UUID;
+BEGIN
+  IF v_user IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
+  SELECT * INTO v_method FROM public.payment_methods WHERE id=p_payment_method_id AND is_enabled=TRUE AND archived_at IS NULL AND method_type<>'provider';
+  IF NOT FOUND THEN RAISE EXCEPTION 'Payment method is unavailable'; END IF;
+  IF p_amount<v_method.min_amount OR p_amount>v_method.max_amount THEN RAISE EXCEPTION 'Amount is outside the allowed limits'; END IF;
+  IF p_proof_file_path IS NOT NULL AND split_part(p_proof_file_path,'/',1)<>v_user::TEXT THEN RAISE EXCEPTION 'Invalid proof file path'; END IF;
+  IF NOT EXISTS(
+    SELECT 1 FROM public.profiles
+    WHERE id=v_user
+      AND COALESCE(is_suspended,FALSE)=FALSE
+      AND COALESCE(account_status,'active')<>'closed'
+      AND (self_exclusion_until IS NULL OR self_exclusion_until<=NOW())
+  ) THEN RAISE EXCEPTION 'An active account is required'; END IF;
+  INSERT INTO public.manual_deposit_requests(user_id,payment_method_id,amount,transaction_reference,user_note,proof_file_path,risk_score)
+  VALUES(v_user,p_payment_method_id,p_amount,trim(p_transaction_reference),NULLIF(trim(COALESCE(p_user_note,'')),''),p_proof_file_path,
+    CASE WHEN p_amount>=5000 THEN 70 WHEN p_amount>=1000 THEN 40 ELSE 10 END) RETURNING id INTO v_id;
+  RETURN v_id;
+EXCEPTION WHEN unique_violation THEN RAISE EXCEPTION 'This transaction reference has already been submitted';
+END; $;
+REVOKE ALL ON FUNCTION public.submit_manual_deposit_request(UUID,NUMERIC,TEXT,TEXT,TEXT) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.submit_manual_deposit_request(UUID,NUMERIC,TEXT,TEXT,TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.finalize_manual_deposit_approval(p_request_id UUID,p_admin UUID,p_note TEXT)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE v_request public.manual_deposit_requests%ROWTYPE; v_balance NUMERIC; v_limit NUMERIC; v_month NUMERIC; v_tx UUID;
+BEGIN
+  SELECT * INTO v_request FROM public.manual_deposit_requests WHERE id=p_request_id FOR UPDATE;
+  IF NOT FOUND OR v_request.status NOT IN ('pending','awaiting_approval','on_hold') THEN RAISE EXCEPTION 'Deposit request is not reviewable'; END IF;
+  SELECT COALESCE(demo_balance,0),deposit_limit INTO v_balance,v_limit FROM public.profiles
+    WHERE id=v_request.user_id
+      AND COALESCE(is_suspended,FALSE)=FALSE
+      AND COALESCE(account_status,'active')<>'closed'
+      AND (self_exclusion_until IS NULL OR self_exclusion_until<=NOW()) FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Account is not eligible for deposits'; END IF;
+  SELECT COALESCE(SUM(amount),0) INTO v_month FROM public.manual_deposit_requests
+    WHERE user_id=v_request.user_id AND status='approved' AND reviewed_at>=date_trunc('month',NOW());
+  IF v_limit IS NOT NULL AND v_month+v_request.amount>v_limit THEN RAISE EXCEPTION 'Monthly deposit limit would be exceeded'; END IF;
+  UPDATE public.profiles SET demo_balance=v_balance+v_request.amount,updated_at=NOW() WHERE id=v_request.user_id;
+  INSERT INTO public.wallet_transactions(user_id,type,amount,balance_before,balance_after,description,reference_id,status,metadata)
+  VALUES(v_request.user_id,'deposit',v_request.amount,v_balance,v_balance+v_request.amount,'Maker-checker approved manual deposit',v_request.id,'completed',
+    jsonb_build_object('payment_method_id',v_request.payment_method_id,'transaction_reference',v_request.transaction_reference)) RETURNING id INTO v_tx;
+  UPDATE public.manual_deposit_requests SET status='approved',review_note=NULLIF(trim(COALESCE(p_note,'')),''),reviewed_by=p_admin,reviewed_at=NOW(),wallet_transaction_id=v_tx,updated_at=NOW() WHERE id=p_request_id;
+END; $;
+REVOKE ALL ON FUNCTION public.finalize_manual_deposit_approval(UUID,UUID,TEXT) FROM PUBLIC,anon,authenticated;
+
+COMMENT ON FUNCTION public.submit_manual_deposit_request(UUID,NUMERIC,TEXT,TEXT,TEXT) IS
+  'Accepts manual deposit requests from active customers; KYC is enforced only at withdrawal.';
+
+COMMENT ON FUNCTION public.finalize_manual_deposit_approval(UUID,UUID,TEXT) IS
+  'Credits maker-checker approved deposits without using KYC as a deposit gate.';
+
 COMMENT ON FUNCTION public.apply_crypto_deposit_update(TEXT,TEXT,TEXT,UUID,TEXT,NUMERIC,TEXT,TEXT,NUMERIC,NUMERIC,TEXT,TEXT,JSONB) IS
   'Processes verified provider deposits for active customers without using KYC as a deposit gate.';
 
