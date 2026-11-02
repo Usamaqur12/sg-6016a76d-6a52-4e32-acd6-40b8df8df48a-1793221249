@@ -280,7 +280,7 @@ END; $$;
 DROP FUNCTION IF EXISTS public.submit_manual_deposit_request(UUID,NUMERIC,TEXT,TEXT);
 CREATE OR REPLACE FUNCTION public.submit_manual_deposit_request(
   p_payment_method_id UUID,p_amount NUMERIC,p_transaction_reference TEXT,p_user_note TEXT DEFAULT NULL,p_proof_file_path TEXT DEFAULT NULL
-) RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+) RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_user UUID:=auth.uid(); v_method public.payment_methods%ROWTYPE; v_id UUID;
 BEGIN
   IF v_user IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
@@ -300,12 +300,12 @@ BEGIN
     CASE WHEN p_amount>=5000 THEN 70 WHEN p_amount>=1000 THEN 40 ELSE 10 END) RETURNING id INTO v_id;
   RETURN v_id;
 EXCEPTION WHEN unique_violation THEN RAISE EXCEPTION 'This transaction reference has already been submitted';
-END; $;
+END; $$;
 REVOKE ALL ON FUNCTION public.submit_manual_deposit_request(UUID,NUMERIC,TEXT,TEXT,TEXT) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.submit_manual_deposit_request(UUID,NUMERIC,TEXT,TEXT,TEXT) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.finalize_manual_deposit_approval(p_request_id UUID,p_admin UUID,p_note TEXT)
-RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_request public.manual_deposit_requests%ROWTYPE; v_balance NUMERIC; v_limit NUMERIC; v_month NUMERIC; v_tx UUID;
 BEGIN
   SELECT * INTO v_request FROM public.manual_deposit_requests WHERE id=p_request_id FOR UPDATE;
@@ -324,7 +324,7 @@ BEGIN
   VALUES(v_request.user_id,'deposit',v_request.amount,v_balance,v_balance+v_request.amount,'Maker-checker approved manual deposit',v_request.id,'completed',
     jsonb_build_object('payment_method_id',v_request.payment_method_id,'transaction_reference',v_request.transaction_reference)) RETURNING id INTO v_tx;
   UPDATE public.manual_deposit_requests SET status='approved',review_note=NULLIF(trim(COALESCE(p_note,'')),''),reviewed_by=p_admin,reviewed_at=NOW(),wallet_transaction_id=v_tx,updated_at=NOW() WHERE id=p_request_id;
-END; $;
+END; $$;
 REVOKE ALL ON FUNCTION public.finalize_manual_deposit_approval(UUID,UUID,TEXT) FROM PUBLIC,anon,authenticated;
 
 COMMENT ON FUNCTION public.submit_manual_deposit_request(UUID,NUMERIC,TEXT,TEXT,TEXT) IS
@@ -334,7 +334,7 @@ COMMENT ON FUNCTION public.finalize_manual_deposit_approval(UUID,UUID,TEXT) IS
   'Credits maker-checker approved deposits without using KYC as a deposit gate.';
 
 CREATE OR REPLACE FUNCTION public.request_broker_payout(p_amount NUMERIC,p_destination_reference TEXT)
-RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_user UUID:=auth.uid(); v_broker public.brokers%ROWTYPE; v_available NUMERIC; v_reserved NUMERIC; v_id UUID;
 BEGIN
   IF v_user IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
@@ -356,7 +356,7 @@ BEGIN
   INSERT INTO public.broker_payout_requests(broker_id,amount,destination_reference)
   VALUES(v_broker.id,p_amount,NULLIF(trim(p_destination_reference),'')) RETURNING id INTO v_id;
   RETURN v_id;
-END; $;
+END; $$;
 
 COMMENT ON FUNCTION public.request_broker_payout(NUMERIC,TEXT) IS
   'Creates a broker commission withdrawal request and requires approved KYC.';
