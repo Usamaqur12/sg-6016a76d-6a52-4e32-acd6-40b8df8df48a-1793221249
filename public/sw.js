@@ -1,4 +1,4 @@
-const CACHE_NAME = "mindbetpro-shell-v9";
+const CACHE_NAME = "mindbetpro-shell-v10";
 const OFFLINE_URL = "/offline.html";
 self.addEventListener("install", (event) => { event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL, "/mindbetpro-icon.svg", "/manifest.webmanifest"])).catch(() => undefined)); self.skipWaiting(); });
 self.addEventListener("activate", (event) => { event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))); self.clients.claim(); });
