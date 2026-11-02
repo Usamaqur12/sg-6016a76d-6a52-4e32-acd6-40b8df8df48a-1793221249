@@ -251,7 +251,7 @@ export default function AdminUserDetailsPage() {
                   <div className="flex flex-col gap-3 rounded-lg border border-destructive/50 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="font-semibold text-destructive">Permanent customer and history deletion</div>
-                      <p className="text-xs text-muted-foreground">Irreversibly deletes the customer, bets, wallet/ledger transactions, casino/Aviator activity, KYC, bonuses, support and related records. Wallet balance and pending activity must be settled first.</p>
+                      <p className="text-xs text-muted-foreground">Irreversibly deletes the customer, bets, wallet/ledger transactions, casino/Aviator activity, KYC, bonuses, support and related records. Confirmed super-admin purge also removes pending activity and all cash, bonus and locked wallet balances.</p>
                     </div>
                     <Button variant="destructive" disabled={saving} onClick={() => void permanentlyDeleteUser()}>
                       <Trash2 className="mr-2 h-4 w-4" />Delete Customer & All History
