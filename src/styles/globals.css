@@ -67,9 +67,18 @@
     @apply border-border;
   }
   
+  html,
+  body,
+  #__next {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    overscroll-behavior-x: none;
   }
   
   /* Premium scrollbar */
