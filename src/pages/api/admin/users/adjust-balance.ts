@@ -23,7 +23,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const parsed = requestSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Enter an amount from 0.01 to 100000.00 and a meaningful reason" });
+    const reasonIssue = parsed.error.issues.find((issue) => issue.path[0] === "reason");
+    const amountIssue = parsed.error.issues.find((issue) => issue.path[0] === "amount");
+    return res.status(400).json({
+      error: reasonIssue
+        ? "Enter an adjustment reason of at least 5 characters"
+        : amountIssue
+          ? "Enter an amount from 0.01 to 100000.00"
+          : "Enter valid balance adjustment details",
+    });
   }
   const signedAmount = parsed.data.operation === "subtract"
     ? -Math.round(parsed.data.amount * 100) / 100
