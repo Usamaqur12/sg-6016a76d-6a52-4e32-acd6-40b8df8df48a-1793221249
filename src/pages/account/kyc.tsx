@@ -130,16 +130,12 @@ export default function KYCPage() {
     try {
       // Upload to Supabase Storage
       const fileName = `${user.id}/${documentType}_${Date.now()}.${file.name.split(".").pop()}`;
-      const { error: uploadError, data } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("kyc-documents")
         .upload(fileName, file);
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from("kyc-documents")
-        .getPublicUrl(fileName);
 
       // Save document record
       const { error: insertError } = await supabase
@@ -147,7 +143,7 @@ export default function KYCPage() {
         .insert({
           user_id: user.id,
           document_type: documentType,
-          file_url: publicUrl,
+          file_url: fileName,
           status: "pending",
         });
 
@@ -265,13 +261,13 @@ export default function KYCPage() {
       
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto space-y-6">
-          {profile?.account_status === "pending_kyc" && (
+          {kycStatus !== "approved" && (
             <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-4">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
               <div>
-                <p className="font-semibold">Account activation requires KYC approval</p>
+                <p className="font-semibold">KYC is required only for withdrawals</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  You can upload and review your documents now. Betting, wallet transactions, deposits and withdrawals remain locked until KYC is approved or an administrator activates the account.
+                  You can use the account, deposit and play without KYC. Complete verification before requesting any payout.
                 </p>
               </div>
             </div>
@@ -280,7 +276,7 @@ export default function KYCPage() {
           <div>
             <h1 className="text-3xl font-bold mb-2">KYC Verification</h1>
             <p className="text-muted-foreground">
-              Complete your identity verification to unlock full account features
+              Complete identity verification when you are ready to request a withdrawal
             </p>
           </div>
 
