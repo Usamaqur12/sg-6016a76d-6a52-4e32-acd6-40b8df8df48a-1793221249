@@ -259,7 +259,11 @@
   
   /* Mobile bottom nav */
   .mobile-nav {
-    @apply fixed bottom-0 left-0 right-0 h-14 bg-surface/[0.95] backdrop-blur-md border-t border-border z-50 lg:hidden;
+    @apply fixed bottom-0 left-0 right-0 bg-surface/[0.97] backdrop-blur-md border-t border-border z-50 lg:hidden;
+    min-height: 3.5rem;
+    height: calc(3.5rem + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    touch-action: manipulation;
   }
   
   /* Truncate text */
