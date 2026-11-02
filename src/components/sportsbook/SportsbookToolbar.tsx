@@ -53,12 +53,12 @@ export function SportsbookToolbar({
             className="h-9 border-border bg-background pl-9 text-xs"
           />
         </div>
-        <label className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+        <label className="flex w-full min-w-0 items-center gap-2 text-[11px] font-semibold text-muted-foreground md:w-auto">
           Sort
           <select
             value={sort}
             onChange={(event) => onSortChange(event.target.value as SportsbookSort)}
-            className="h-9 min-w-[155px] rounded border border-border bg-background px-2.5 text-xs font-semibold text-foreground"
+            className="h-9 min-w-0 flex-1 rounded border border-border bg-background px-2.5 text-xs font-semibold text-foreground md:min-w-[155px]"
             aria-label="Sort sportsbook events"
           >
             <option value="soonest">Starting soon</option>
@@ -69,7 +69,7 @@ export function SportsbookToolbar({
         </label>
       </div>
 
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden pb-0.5">
         {visibleViews.map((option) => {
           const active = view === option.value;
           return (
