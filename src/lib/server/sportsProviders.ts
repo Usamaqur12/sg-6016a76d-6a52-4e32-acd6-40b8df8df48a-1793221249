@@ -185,6 +185,31 @@ const oddsApiEventSchema = z.object({
   }).passthrough()),
 }).passthrough();
 
+function oddsApiSport(sportKey: string, sportTitle: string) {
+  const prefix = sportKey.toLowerCase().split("_")[0];
+  const known: Record<string, { name: string; slug: string; icon: string }> = {
+    soccer: { name: "Football", slug: "football", icon: "⚽" },
+    cricket: { name: "Cricket", slug: "cricket", icon: "🏏" },
+    tennis: { name: "Tennis", slug: "tennis", icon: "🎾" },
+    basketball: { name: "Basketball", slug: "basketball", icon: "🏀" },
+    icehockey: { name: "Ice Hockey", slug: "ice-hockey", icon: "🏒" },
+    baseball: { name: "Baseball", slug: "baseball", icon: "⚾" },
+    americanfootball: { name: "American Football", slug: "american-football", icon: "🏈" },
+    boxing: { name: "Boxing", slug: "boxing", icon: "🥊" },
+    mma: { name: "MMA", slug: "mma", icon: "🥋" },
+    golf: { name: "Golf", slug: "golf", icon: "⛳" },
+    handball: { name: "Handball", slug: "handball", icon: "🤾" },
+    tabletennis: { name: "Table Tennis", slug: "table-tennis", icon: "🏓" },
+    volleyball: { name: "Volleyball", slug: "volleyball", icon: "🏐" },
+    aussierules: { name: "Aussie Rules", slug: "aussie-rules", icon: "🏉" },
+  };
+  if (known[prefix]) return known[prefix];
+  if (prefix.startsWith("rugby")) return { name: "Rugby", slug: "rugby", icon: "🏉" };
+
+  const fallbackName = sportTitle.split(" - ")[0] || sportTitle || "Sport";
+  return { name: fallbackName, slug: slugify(fallbackName), icon: "🏆" };
+}
+
 async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | null) {
   if (!apiKey) throw new Error("The Odds API key is missing");
 
@@ -248,7 +273,7 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
     const status = liveAgeMs >= 0 && liveAgeMs <= 6 * 60 * 60 * 1000
       ? "live" as const
       : "upcoming" as const;
-    const isFootball = event.sport_key.startsWith("soccer");
+    const normalizedSport = oddsApiSport(event.sport_key, event.sport_title);
     const oddsFingerprint = normalizedOutcomes
       .map((outcome) => `${outcome.selection}:${outcome.value}`)
       .join("|");
@@ -257,11 +282,7 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
       updateId: `${event.id}:${bookmaker.key}:${h2h.last_update || bookmaker.last_update || startTime}:${oddsFingerprint}`,
       providerId: config.id,
       providerEventId: event.id,
-      sport: {
-        name: isFootball ? "Football" : event.sport_title.split(" - ")[0] || event.sport_title,
-        slug: isFootball ? "football" : slugify(event.sport_title.split(" - ")[0] || event.sport_title),
-        icon: isFootball ? "⚽" : "🏆",
-      },
+      sport: normalizedSport,
       league: {
         name: event.sport_title,
         slug: slugify(event.sport_title),
