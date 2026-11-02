@@ -32,7 +32,7 @@ export function BrandLogo({ href = "/", admin = false, compact = false, classNam
           MindBet <span className="text-primary">Pro</span>
         </span>
         <span className="mt-1 block whitespace-nowrap text-[8px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
-          {admin ? "Admin Control" : "Sportsbook & Casino"}
+          {admin ? "Admin Control" : "mindbetpro.com"}
         </span>
       </span>
     </span>
