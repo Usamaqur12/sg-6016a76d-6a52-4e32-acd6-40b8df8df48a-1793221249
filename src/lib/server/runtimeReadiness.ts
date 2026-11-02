@@ -42,10 +42,10 @@ export function getRuntimeReadiness() {
       critical: true,
     },
     {
-      id: "demo-disabled",
-      label: "Demo services disabled",
+      id: "production-data-mode",
+      label: "Production data mode",
       ready: !enabled("NEXT_PUBLIC_DEMO_MODE") && !enabled("NEXT_PUBLIC_ENABLE_DEMO_BACKEND"),
-      detail: "Both browser demo flags must be false on a live deployment.",
+      detail: "Browser preview backends must remain disabled on a live deployment.",
       owner: "development",
       critical: true,
     },

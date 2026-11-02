@@ -112,7 +112,6 @@ export default function WalletPage() {
         email: user.email ?? "",
         full_name: user.user_metadata?.full_name ?? "Account",
         kyc_status: "pending",
-        demo_balance: 0,
       }
     );
 

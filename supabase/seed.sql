@@ -1,6 +1,5 @@
--- Approved play-money fixtures for local/staging demo environments only.
--- This file is intentionally separate from migrations and must not be loaded
--- into a real-money production project.
+-- Optional sports catalogue fixtures for local interface testing only.
+-- This file contains no customer account, wallet balance, bonus or promotional credit.
 
 INSERT INTO public.sports (id, name, slug, icon, display_order, is_active)
 VALUES
@@ -67,28 +66,3 @@ ON CONFLICT (id) DO UPDATE SET
   provider_odds = EXCLUDED.provider_odds,
   last_provider_update = NOW(),
   updated_at = NOW();
-
-INSERT INTO public.promotions (
-  id,title,description,type,bonus_amount,wagering_requirement,max_bonus,
-  valid_from,valid_until,terms_and_conditions,is_active,promo_code,
-  per_user_claim_limit,total_claim_limit,expires_after_days,min_odds,min_legs,
-  loyalty_points_reward,requires_qualifying_deposit
-)
-VALUES (
-  '60000000-0000-0000-0000-000000000001','Prime Demo Welcome',
-  'Claim $100 in play-money bonus credits and complete the wagering target.',
-  'welcome_bonus',100,5,100,NOW()-INTERVAL '1 day',NOW()+INTERVAL '90 days',
-  'Demo credits only. One claim per account. Minimum qualifying odds 1.50.',
-  TRUE,'PRIME100',1,10000,30,1.50,1,100,FALSE
-)
-ON CONFLICT (id) DO UPDATE SET
-  title=EXCLUDED.title,description=EXCLUDED.description,bonus_amount=EXCLUDED.bonus_amount,
-  wagering_requirement=EXCLUDED.wagering_requirement,valid_from=EXCLUDED.valid_from,
-  valid_until=EXCLUDED.valid_until,is_active=TRUE,promo_code=EXCLUDED.promo_code,
-  min_odds=EXCLUDED.min_odds,expires_after_days=EXCLUDED.expires_after_days,
-  updated_at=NOW();
-
--- Demo wallet seed - starting with $0 balance
-INSERT INTO wallet_accounts (user_id, balance, currency) 
-VALUES ('00000000-0000-0000-0000-000000000001', 0.00, 'USD')
-ON CONFLICT (user_id) DO NOTHING;

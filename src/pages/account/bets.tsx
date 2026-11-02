@@ -91,7 +91,6 @@ export default function MyBets() {
         email: authUser.email ?? "",
         full_name: authUser.user_metadata?.full_name ?? "Account",
         kyc_status: "pending",
-        demo_balance: 0,
       }
     );
 

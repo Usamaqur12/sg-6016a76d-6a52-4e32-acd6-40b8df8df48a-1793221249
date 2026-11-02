@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { supabase } from "@/integrations/supabase/client";
+import { getMyWalletBalances } from "@/services/walletService";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -32,6 +33,7 @@ export default function KYCPage() {
   const [documents, setDocuments] = useState<KYCDocument[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
   const [kycStatus, setKycStatus] = useState<string>("not_submitted");
+  const [headerBalance, setHeaderBalance] = useState(0);
 
   useEffect(() => {
     checkAuth();
@@ -58,6 +60,8 @@ export default function KYCPage() {
       setProfile(profile);
     }
 
+    const walletResult = await getMyWalletBalances();
+    setHeaderBalance(Number(walletResult.balances?.available ?? walletResult.balances?.cash ?? 0));
     await loadKYCDocuments(user.id);
   }
 
@@ -252,7 +256,7 @@ export default function KYCPage() {
           profile
             ? {
                 email: user?.email || "",
-                balance: profile.demo_balance || 0,
+                balance: headerBalance,
               }
             : null
         }

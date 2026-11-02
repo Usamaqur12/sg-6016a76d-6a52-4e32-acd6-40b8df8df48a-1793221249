@@ -278,7 +278,7 @@ export default function Settings() {
                   <div>
                     <Label>Account Type</Label>
                     <div className="mt-2">
-                      <Badge variant="outline">Demo Account</Badge>
+                      <Badge variant="outline">Customer Account</Badge>
                     </div>
                   </div>
 

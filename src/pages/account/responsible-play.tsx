@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { supabase } from "@/integrations/supabase/client";
+import { getMyWalletBalances } from "@/services/walletService";
 import {
   getUserResponsibleGamingSettings,
   setResponsibleGamingLimit,
@@ -41,8 +42,8 @@ export default function ResponsiblePlaySettings() {
     if (!user) { await router.push("/auth/login"); return; }
     setUserId(user.id);
     setEmail(user.email || "");
-    const { data: profile } = await supabase.from("profiles").select("demo_balance").eq("id", user.id).single();
-    setBalance(Number(profile?.demo_balance || 0));
+    const walletResult = await getMyWalletBalances();
+    setBalance(Number(walletResult.balances?.available ?? walletResult.balances?.cash ?? 0));
     await loadSettings(user.id);
   }
 

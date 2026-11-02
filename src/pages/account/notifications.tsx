@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { ArrowLeft, Bell, CheckCheck, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getMyWalletBalances } from "@/services/walletService";
 import {
   getNotifications,
   markAllNotificationsRead,
@@ -24,6 +25,7 @@ export default function NotificationsPage() {
   const [profile, setProfile] = useState<any>(null);
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [headerBalance, setHeaderBalance] = useState(0);
 
   useEffect(() => { void initialize(); }, []);
 
@@ -33,6 +35,8 @@ export default function NotificationsPage() {
     setUser(authUser);
     const { data } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
     setProfile(data);
+    const walletResult = await getMyWalletBalances();
+    setHeaderBalance(Number(walletResult.balances?.available ?? walletResult.balances?.cash ?? 0));
     await loadNotifications();
   }
 
@@ -62,7 +66,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background pb-14 lg:pb-0">
-      <Header user={profile ? { email: user?.email || "", balance: Number(profile.demo_balance || 0) } : null} onAuthClick={() => router.push("/auth/login")} />
+      <Header user={profile ? { email: user?.email || "", balance: headerBalance } : null} onAuthClick={() => router.push("/auth/login")} />
       <main className="flex-1"><div className="container max-w-4xl py-6 space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">

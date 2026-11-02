@@ -5,17 +5,17 @@ export type AppLocale = "en" | "ur";
 const messages = {
   en: {
     sports: "Sports", live: "Live", casino: "Casino", esports: "Esports", promotions: "Promotions",
-    search: "Search...", demoWallet: "Demo Wallet", wallet: "Wallet", rewards: "Rewards", notifications: "Notifications",
+    search: "Search...", wallet: "Wallet", rewards: "Rewards", notifications: "Notifications",
     unread: "unread", markAllRead: "Mark all read", noNotifications: "No notifications yet",
     myAccount: "My Account", myBets: "My Bets", settings: "Settings", logout: "Logout",
-    login: "Login", register: "Register", home: "Home", account: "Account", demoAccount: "Demo account",
+    login: "Login", register: "Register", home: "Home", account: "Account",
   },
   ur: {
     sports: "کھیل", live: "لائیو", casino: "کیسینو", esports: "ای اسپورٹس", promotions: "پروموشنز",
-    search: "تلاش کریں...", demoWallet: "ڈیمو والیٹ", wallet: "والیٹ", rewards: "انعامات", notifications: "اطلاعات",
+    search: "تلاش کریں...", wallet: "والیٹ", rewards: "انعامات", notifications: "اطلاعات",
     unread: "نئی", markAllRead: "سب کو پڑھا ہوا کریں", noNotifications: "ابھی کوئی اطلاع نہیں",
     myAccount: "میرا اکاؤنٹ", myBets: "میری بیٹس", settings: "ترتیبات", logout: "لاگ آؤٹ",
-    login: "لاگ اِن", register: "رجسٹر", home: "ہوم", account: "اکاؤنٹ", demoAccount: "ڈیمو اکاؤنٹ",
+    login: "لاگ اِن", register: "رجسٹر", home: "ہوم", account: "اکاؤنٹ",
   },
 } as const;
 
