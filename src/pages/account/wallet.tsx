@@ -86,6 +86,7 @@ export default function WalletPage() {
   const cryptoEnabled = process.env.NEXT_PUBLIC_CRYPTO_DEPOSITS_ENABLED === "true" && providerMethodEnabled;
   const manualMethods = paymentMethods.filter((method) => method.method_type !== "provider");
   const accountActivated = Boolean(profile && profile.account_status !== "closed" && !profile.is_suspended);
+  const withdrawalKycApproved = profile?.kyc_status === "approved";
 
   useEffect(() => {
     checkUser();
@@ -247,6 +248,7 @@ export default function WalletPage() {
   }
 
   async function submitWithdrawal() {
+    if (!withdrawalKycApproved) { setWithdrawalMessage("Approved KYC is required only for withdrawals."); return; }
     const method = manualMethods.find((item) => item.id === withdrawalMethod);
     const address = withdrawalAddresses.find((item) => item.id === selectedWithdrawalAddress && item.payment_method_id === withdrawalMethod);
     const amount = Number(withdrawalAmount);
@@ -398,7 +400,7 @@ export default function WalletPage() {
           <Card className="surface mb-6 border-warning/20">
             <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><ArrowUpRight className="h-5 w-5 text-warning" />Manual Withdrawal</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              {manualMethods.length === 0 ? <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">No manual payout method is enabled.</div> : !accountActivated ? <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">Account activation is required before requesting a withdrawal.</div> : <>
+              {manualMethods.length === 0 ? <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">No manual payout method is enabled.</div> : !accountActivated ? <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">Account activation is required before requesting a withdrawal.</div> : !withdrawalKycApproved ? <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm"><p className="font-semibold">KYC is required only for withdrawals</p><p className="mt-1 text-muted-foreground">Complete identity verification before requesting a payout.</p><Button asChild className="mt-3" size="sm"><Link href="/account/kyc">Complete withdrawal KYC</Link></Button></div> : <>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{manualMethods.map((method) => <button key={`withdraw-${method.id}`} type="button" onClick={() => { setWithdrawalMethod(method.id); setWithdrawalMessage(""); }} className={`rounded-lg border p-4 text-left transition-colors ${withdrawalMethod === method.id ? "border-warning bg-warning/5" : "border-border hover:border-warning/40"}`}><div className="font-semibold">{method.name}</div><div className="mt-1 text-xs text-muted-foreground">{method.currency}{method.network ? ` · ${method.network}` : ""}</div><div className="mt-2 text-[10px] text-muted-foreground">Limits: ${Number(method.min_amount).toFixed(2)}–${Number(method.max_amount).toFixed(2)}</div></button>)}</div>
                 {withdrawalMethod && <div className="space-y-4 rounded-lg border border-warning/20 bg-warning/5 p-4">
                   <div className="rounded-lg border border-border bg-background/70 p-4">
