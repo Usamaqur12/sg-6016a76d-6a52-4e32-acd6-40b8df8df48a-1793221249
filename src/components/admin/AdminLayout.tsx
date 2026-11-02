@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, Receipt, CreditCard, Gift, 
   MessageSquare, AlertTriangle, BarChart3, Shield,
   FileText, TrendingUp, Megaphone, Building2, Gamepad2,
-  Settings, LogOut, Bitcoin, LineChart, Activity, Trophy, Coins, Bell, Dices, CheckCircle
+  Settings, LogOut, Bitcoin, LineChart, Activity, Trophy, Coins, Bell, Dices, CheckCircle, Menu
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
@@ -47,6 +47,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [adminRole, setAdminRole] = useState<string>("admin");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -158,7 +159,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 w-64 bg-card border-r border-border">
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="p-5 border-b border-border">
@@ -175,6 +176,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
                     isActive
                       ? "bg-primary text-primary-foreground"
@@ -209,9 +211,24 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close admin menu"
+          className="fixed inset-0 z-40 bg-black/65 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Main content */}
-      <div className="ml-64 p-8">
-        {children}
+      <div className="min-w-0 lg:ml-64">
+        <div className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/95 px-3 backdrop-blur lg:hidden">
+          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)} aria-label="Open admin menu">
+            <Menu className="h-5 w-5" />
+          </Button>
+          <BrandLogo href="/admin" admin compact />
+        </div>
+        <main className="p-3 sm:p-5 lg:p-8">{children}</main>
       </div>
     </div>
   );
