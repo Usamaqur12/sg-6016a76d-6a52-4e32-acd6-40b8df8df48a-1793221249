@@ -1,5 +1,5 @@
--- Recreate hard purge without legacy JWT-claim service check.
--- EXECUTE remains restricted to service_role and the target admin is verified as an active super admin.
+-- Recreate hard purge for an explicitly confirmed super-admin deletion.
+-- EXECUTE remains restricted to service_role; pending activity and every wallet bucket are purged transactionally.
 
 CREATE OR REPLACE FUNCTION public.hard_purge_customer(
   p_user_id UUID,
@@ -34,9 +34,8 @@ BEGIN
     +(SELECT COUNT(*) FROM public.manual_withdrawal_requests WHERE user_id=p_user_id AND status IN('pending','approved'))
     +(SELECT COUNT(*) FROM public.aviator_bets WHERE user_id=p_user_id AND status='placed')
   INTO v_pending;
-  IF ABS(v_balance)>0.000001 OR v_pending>0 THEN
-    RAISE EXCEPTION 'Wallet balance and all pending activity must be settled before hard purge';
-  END IF;
+  -- The destructive UI/API requires the exact customer email plus DELETE ALL HISTORY.
+  -- After that confirmation, balances and pending rows are deliberately included in the purge.
 
   SELECT COUNT(*) INTO v_bets FROM public.bets WHERE user_id=p_user_id;
   SELECT COUNT(*) INTO v_transactions FROM public.wallet_transactions WHERE user_id=p_user_id;
@@ -84,13 +83,35 @@ BEGIN
   DELETE FROM public.withdrawal_addresses WHERE user_id=p_user_id;
   DELETE FROM public.admin_balance_adjustments WHERE user_id=p_user_id;
 
+  -- A journal can contain both a customer posting and its system-account counter-posting.
+  -- Delete the complete journal so the deferred balanced-ledger constraint remains valid.
+  CREATE TEMP TABLE purge_customer_journals ON COMMIT DROP AS
+  SELECT DISTINCT p.journal_id
+  FROM public.ledger_postings p
+  JOIN public.ledger_accounts a ON a.id=p.account_id
+  WHERE a.user_id=p_user_id
+  UNION
+  SELECT j.id
+  FROM public.ledger_journals j
+  WHERE j.source_transaction_id IN (
+    SELECT id FROM public.wallet_transactions WHERE user_id=p_user_id
+  );
+
   DELETE FROM public.ledger_postings
-  WHERE account_id IN (SELECT id FROM public.ledger_accounts WHERE user_id=p_user_id);
+  WHERE journal_id IN (SELECT journal_id FROM purge_customer_journals);
   DELETE FROM public.ledger_journals
-  WHERE source_transaction_id IN (SELECT id FROM public.wallet_transactions WHERE user_id=p_user_id);
+  WHERE id IN (SELECT journal_id FROM purge_customer_journals);
   DELETE FROM public.ledger_accounts WHERE user_id=p_user_id;
   DELETE FROM public.wallet_transactions WHERE user_id=p_user_id;
   DELETE FROM public.wallet_accounts WHERE user_id=p_user_id;
+
+  -- Keep shared clearing/reserve account balances consistent with their remaining postings.
+  UPDATE public.ledger_accounts a
+  SET balance=COALESCE((
+        SELECT SUM(p.amount) FROM public.ledger_postings p WHERE p.account_id=a.id
+      ),0),
+      updated_at=NOW()
+  WHERE a.is_system=TRUE;
 
   DELETE FROM public.support_ticket_messages WHERE author_id=p_user_id;
   DELETE FROM public.support_tickets WHERE user_id=p_user_id;
@@ -117,6 +138,7 @@ BEGIN
 
   RETURN jsonb_build_object(
     'user_id',p_user_id,'deleted_bets',v_bets,'deleted_wallet_transactions',v_transactions,
+    'discarded_wallet_balance',v_balance,'deleted_pending_activity',v_pending,
     'financial_history_deleted',TRUE
   );
 END;
