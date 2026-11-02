@@ -123,7 +123,7 @@ export default function RegisterPage() {
           <div className="mx-auto mb-4 flex justify-center"><BrandLogo href="/" /></div>
           <CardTitle className="text-2xl">Create your MindBet Pro account</CardTitle>
           <CardDescription>
-            Verify your email to activate your account and access betting and wallet features.
+            Verify your email to activate your account. KYC is required only when requesting a withdrawal.
           </CardDescription>
         </CardHeader>
         <CardContent>
