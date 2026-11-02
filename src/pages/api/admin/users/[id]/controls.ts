@@ -14,7 +14,7 @@ function getErrorMessage(error: unknown): string {
 
 const controlsSchema = z.object({
   reason: z.string().trim().min(5).max(500),
-  action: z.enum(["archive", "restore", "activate_without_kyc", "require_kyc"]).optional(),
+  action: z.enum(["archive", "restore"]).optional(),
   controls: z.object({
     is_suspended: z.boolean().optional(),
     wallet_frozen: z.boolean().optional(),
@@ -47,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userId = parsedId.data;
     const { data: target, error: targetError } = await (supabaseAdmin as any)
       .from("profiles")
-      .select("id,email,is_admin,kyc_status,kyc_activation_override,account_status,is_suspended,wallet_frozen,betting_disabled,deposits_disabled,withdrawals_disabled")
+      .select("id,email,is_admin,kyc_status,account_status,is_suspended,wallet_frozen,betting_disabled,deposits_disabled,withdrawals_disabled")
       .eq("id", userId)
       .maybeSingle();
     if (targetError) throw targetError;
@@ -74,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     } else if (parsedBody.data.action === "restore") {
       Object.assign(updates, {
-        account_status: target.kyc_status === "approved" || target.kyc_activation_override ? "active" : "pending_kyc",
+        account_status: "active",
         is_suspended: false,
         wallet_frozen: false,
         betting_disabled: false,
@@ -82,16 +82,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         withdrawals_disabled: false,
         account_deleted_at: null,
         account_deleted_by: null,
-      });
-    } else if (parsedBody.data.action === "activate_without_kyc") {
-      Object.assign(updates, {
-        kyc_activation_override: true,
-        account_status: "active",
-      });
-    } else if (parsedBody.data.action === "require_kyc") {
-      Object.assign(updates, {
-        kyc_activation_override: false,
-        account_status: target.kyc_status === "approved" ? "active" : "pending_kyc",
       });
     }
 
@@ -103,7 +93,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .update(updates)
       .eq("id", userId)
       .eq("is_admin", false)
-      .select("id,email,kyc_status,kyc_activation_override,is_suspended,account_status,wallet_frozen,betting_disabled,deposits_disabled,withdrawals_disabled,account_deleted_at,control_reason")
+      .select("id,email,kyc_status,is_suspended,account_status,wallet_frozen,betting_disabled,deposits_disabled,withdrawals_disabled,account_deleted_at,control_reason")
       .single();
     if (updateError) throw updateError;
 
@@ -132,13 +122,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : forwardedFor?.split(",")[0]?.trim() || req.socket.remoteAddress || null;
     await supabaseAdmin.from("audit_logs").insert({
       admin_id: auth.userId,
-      action: parsedBody.data.action === "activate_without_kyc"
-        ? "user_kyc_activation_overridden"
-        : parsedBody.data.action === "require_kyc"
-          ? "user_kyc_activation_override_removed"
-          : parsedBody.data.action
-            ? "user_" + parsedBody.data.action + "d"
-            : "user_controls_updated",
+      action: parsedBody.data.action
+        ? "user_" + parsedBody.data.action + "d"
+        : "user_controls_updated",
       entity_type: "profile",
       entity_id: userId,
       changes: { before: target, after: updated, reason: parsedBody.data.reason },
