@@ -92,6 +92,14 @@ function mapSportsbookEvent(event: RawSportsbookEvent): SportsbookEvent {
   };
 }
 
+function isBettableEvent(event: SportsbookEvent) {
+  return event.markets.some((market) =>
+    market.outcomes.filter((outcome) =>
+      Number.isFinite(outcome.value) && outcome.value > 1
+    ).length >= 2
+  );
+}
+
 const eventSelect = "*, leagues(name), sports(name, slug), markets(*, odds(*))";
 
 export async function fetchLiveEvents(): Promise<SportsbookEvent[]> {
@@ -103,7 +111,9 @@ export async function fetchLiveEvents(): Promise<SportsbookEvent[]> {
     .order("start_time", { ascending: true });
 
   if (error) throw error;
-  return ((events || []) as unknown as RawSportsbookEvent[]).map(mapSportsbookEvent);
+  return ((events || []) as unknown as RawSportsbookEvent[])
+    .map(mapSportsbookEvent)
+    .filter(isBettableEvent);
 }
 
 export async function fetchUpcomingEvents(sportSlug?: string): Promise<SportsbookEvent[]> {
@@ -129,7 +139,9 @@ export async function fetchUpcomingEvents(sportSlug?: string): Promise<Sportsboo
 
   const { data: events, error } = await query;
   if (error) throw error;
-  return ((events || []) as unknown as RawSportsbookEvent[]).map(mapSportsbookEvent);
+  return ((events || []) as unknown as RawSportsbookEvent[])
+    .map(mapSportsbookEvent)
+    .filter(isBettableEvent);
 }
 
 export async function fetchEventById(eventId: string) {
