@@ -102,7 +102,6 @@ export default function Dashboard() {
       await Promise.all([
         loadBetStats(authUser.id),
         loadSportStats(authUser.id),
-        loadDocuments(authUser.id),
         loadRecentBets(authUser.id),
       ]);
     }
@@ -307,7 +306,6 @@ export default function Dashboard() {
               <TabsList>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="stats">Detailed Stats</TabsTrigger>
-                <TabsTrigger value="documents">Documents</TabsTrigger>
               </TabsList>
 
               {/* Overview Tab */}
@@ -491,55 +489,7 @@ export default function Dashboard() {
                 </Card>
               </TabsContent>
 
-              {/* Documents Tab */}
-              <TabsContent value="documents" className="space-y-6">
-                <Card className="surface">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <FileCheck className="h-5 w-5 text-primary" />
-                        Verified Documents
-                      </CardTitle>
-                      <Link href="/account/kyc">
-                        <Button size="sm">Upload Documents</Button>
-                      </Link>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {documents.length === 0 ? (
-                      <div className="text-center py-8">
-                        <FileCheck className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                        <p className="font-medium">No documents uploaded</p>
-                        <p className="text-sm text-muted-foreground mt-1">Upload your ID and proof of address for account verification</p>
-                        <Link href="/account/kyc">
-                          <Button className="mt-4">Start KYC Verification</Button>
-                        </Link>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {documents.map((doc) => (
-                          <div key={doc.id} className="flex items-center justify-between p-4 rounded-lg border border-border">
-                            <div className="flex items-center gap-3">
-                              {getDocumentIcon(doc.status)}
-                              <div>
-                                <div className="text-sm font-medium capitalize">{doc.document_type.replace("_", " ")}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  Uploaded {new Date(doc.uploaded_at).toLocaleDateString()}
-                                  {doc.reviewed_at && ` · Reviewed ${new Date(doc.reviewed_at).toLocaleDateString()}`}
-                                </div>
-                                {doc.rejection_reason && (
-                                  <div className="text-xs text-danger mt-1">{doc.rejection_reason}</div>
-                                )}
-                              </div>
-                            </div>
-                            {getDocumentBadge(doc.status)}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
+
             </Tabs>
           )}
         </div>
