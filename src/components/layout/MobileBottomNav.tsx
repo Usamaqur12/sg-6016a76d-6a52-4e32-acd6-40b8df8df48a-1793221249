@@ -51,7 +51,7 @@ export function MobileBottomNav() {
             </>
           );
           const className = cn(
-            "relative flex-1 w-full min-h-12 flex flex-col items-center justify-center gap-0.5 py-1.5 transition-colors",
+            "relative min-w-0 flex-1 min-h-12 flex flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 transition-colors",
             isActive ? "text-primary" : "text-muted-foreground"
           );
 
