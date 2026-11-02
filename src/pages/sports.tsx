@@ -38,7 +38,6 @@ export default function Sports() {
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [selectedSport, setSelectedSport] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<SportsbookEvent | null>(null);
   const [isMobileBetSlipOpen, setIsMobileBetSlipOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -57,26 +56,24 @@ export default function Sports() {
     }
   }, []);
 
-  async function loadEvents() {
+  const loadEvents = useCallback(async (showLoader = true) => {
     try {
-      setEventsLoading(true);
-      const eventsData = await fetchUpcomingEvents(selectedSport || undefined);
-      if (!eventsData) {
-        console.error("Failed to load events");
-        return;
-      }
-      setEvents(eventsData as any);
+      if (showLoader) setEventsLoading(true);
+      setEventsError(null);
+      const requestedSport = typeof router.query.sport === "string" ? router.query.sport : undefined;
+      const eventsData = await fetchUpcomingEvents(requestedSport);
+      setEvents((eventsData || []) as any);
     } catch (error: any) {
       console.error("Error loading events:", error);
-      toast({
-        title: "Error loading events",
-        description: error.message,
-        variant: "destructive",
-      });
+      const message = error?.message || "The sportsbook feed could not be loaded";
+      setEventsError(message);
+      if (showLoader) {
+        toast({ title: "Error loading events", description: message, variant: "destructive" });
+      }
     } finally {
-      setEventsLoading(false);
+      if (showLoader) setEventsLoading(false);
     }
-  }
+  }, [router.query.sport, toast]);
 
   const loadFavorites = useCallback(async (userId: string) => {
     const result = await getUserFavoriteEventIds(userId);
@@ -85,7 +82,9 @@ export default function Sports() {
 
   useEffect(() => {
     void loadEvents();
+  }, [loadEvents]);
 
+  useEffect(() => {
     db.auth.getSession().then(({ data: { session } }) => {
       const nextUser = session?.user
         ? { id: session.user.id, email: session.user.email }
@@ -112,14 +111,20 @@ export default function Sports() {
     });
 
     return () => subscription.unsubscribe();
-  }, [loadEvents, loadFavorites, loadProfile]);
+  }, [loadFavorites, loadProfile]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void loadEvents();
+      if (document.visibilityState === "visible") void loadEvents(false);
     }, 10_000);
     return () => window.clearInterval(timer);
   }, [loadEvents]);
+
+  useEffect(() => {
+    const openDrawer = () => setIsMobileBetSlipOpen(true);
+    window.addEventListener("open-mobile-betslip", openDrawer);
+    return () => window.removeEventListener("open-mobile-betslip", openDrawer);
+  }, []);
 
   useEffect(() => {
     const eventId = typeof router.query.event === "string" ? router.query.event : null;
