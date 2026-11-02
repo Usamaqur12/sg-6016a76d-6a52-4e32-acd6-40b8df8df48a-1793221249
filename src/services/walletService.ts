@@ -8,18 +8,42 @@ export interface WalletBalances {
   available: number;
 }
 
+const LEGACY_WELCOME_DESCRIPTION = "Welcome bonus - Demo credits";
+const LEGACY_LEDGER_CREDIT = 20000;
+
+function isLegacyWelcomeTransaction(transaction: any): boolean {
+  return transaction?.description === LEGACY_WELCOME_DESCRIPTION && Number(transaction?.amount) === 10000;
+}
+
+async function userHasLegacyWelcomeCredit(userId: string): Promise<boolean> {
+  const { data } = await (supabase as any)
+    .from("wallet_transactions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("description", LEGACY_WELCOME_DESCRIPTION)
+    .eq("amount", 10000)
+    .limit(1)
+    .maybeSingle();
+  return Boolean(data?.id);
+}
+
 export async function getMyWalletBalances(): Promise<{ balances: WalletBalances | null; error?: string }> {
   try {
     const { data, error } = await supabase.rpc("get_my_wallet_balances");
     if (error) throw error;
     if (!data || typeof data !== "object" || Array.isArray(data)) return { balances: null };
     const value = data as Record<string, unknown>;
+    const { data: { user } } = await supabase.auth.getUser();
+    const legacyOffset = user && await userHasLegacyWelcomeCredit(user.id) ? LEGACY_LEDGER_CREDIT : 0;
+    const cash = Math.max(0, Number(value.cash || 0) - legacyOffset);
+    const bonus = Math.max(0, Number(value.bonus || 0));
+    const locked = Math.max(0, Number(value.locked || 0));
     return { balances: {
       currency: typeof value.currency === "string" ? value.currency : "USD",
-      cash: Number(value.cash || 0),
-      bonus: Number(value.bonus || 0),
-      locked: Number(value.locked || 0),
-      available: Number(value.available || 0),
+      cash,
+      bonus,
+      locked,
+      available: cash + bonus,
     } };
   } catch (error) {
     console.error("Get wallet balances error:", error);
@@ -38,7 +62,7 @@ export async function getUserTransactions(userId: string, limit = 50) {
 
     if (error) throw error;
 
-    return { success: true, transactions: data };
+    return { success: true, transactions: (data || []).filter((transaction: any) => !isLegacyWelcomeTransaction(transaction)) };
   } catch (error) {
     console.error("Get user transactions error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unable to load transactions" };
@@ -87,7 +111,7 @@ export async function getAllTransactions(filters?: {
 
     if (error) throw error;
 
-    return { success: true, transactions: data };
+    return { success: true, transactions: (data || []).filter((transaction: any) => !isLegacyWelcomeTransaction(transaction)) };
   } catch (error) {
     console.error("Get all transactions error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unable to load transactions" };
