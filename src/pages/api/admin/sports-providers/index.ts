@@ -4,6 +4,10 @@ import { hasAccess } from "@/lib/adminRoles";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
 import { encryptProviderSecret } from "@/lib/server/providerSecrets";
 import { providerTypes } from "@/lib/server/sportsProviders";
+import {
+  syncSportsProvider,
+  type ManagedSportsProvider,
+} from "@/lib/server/syncSportsProvider";
 import { z } from "zod";
 
 const THE_SPORTS_DB_FREE_URL = "https://www.thesportsdb.com/api/v1/json/123/searchteams.php?t=Arsenal";
@@ -29,6 +33,15 @@ function sanitizeProvider(provider: Record<string, unknown>) {
   return { ...safe, has_api_key: Boolean(encrypted_api_key) };
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return "Unknown provider error";
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const adminAuth = await requireAdminApi(req, res);
   if (!adminAuth) return;
@@ -47,11 +60,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (error) throw error;
 
       return res.status(200).json({ providers: (data || []).map(sanitizeProvider) });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to fetch providers:", error);
       return res.status(500).json({
         error: "Failed to fetch providers",
-        details: error.message,
+        details: errorMessage(error),
       });
     }
   }
@@ -59,7 +72,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     try {
       const parsed = providerSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid provider configuration", details: parsed.error.flatten() });
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: "Invalid provider configuration",
+          details: parsed.error.flatten(),
+        });
+      }
+
       const value = parsed.data;
       const normalizedFromFreeV1 =
         value.providerType === "thesportsdb_live" &&
@@ -73,7 +92,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: "This premium provider requires an API key" });
       }
 
-      const settings = normalizedFromFreeV1
+      const settings = effectiveProviderType === "thesportsdb_demo"
         ? {
             ...value.settings,
             leagueId: String(value.settings.leagueId || "4328"),
@@ -98,17 +117,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (error) throw error;
 
+      let syncResult: Awaited<ReturnType<typeof syncSportsProvider>> | null = null;
+      let syncError: string | null = null;
+
+      if (value.isEnabled) {
+        try {
+          syncResult = await syncSportsProvider(data as ManagedSportsProvider, "sync");
+        } catch (syncFailure) {
+          syncError = errorMessage(syncFailure);
+        }
+      }
+
+      const imported = syncResult?.ingested || 0;
+      const message = syncResult
+        ? `Sports provider saved and ${imported} event${imported === 1 ? "" : "s"} imported.`
+        : syncError
+          ? `Sports provider saved, but first sync failed: ${syncError}`
+          : "Sports provider saved. Enable it to import events.";
+
       return res.status(201).json({
         provider: sanitizeProvider(data),
         normalizedFromFreeV1,
-        message: normalizedFromFreeV1
-          ? "The supplied free v1 URL was added without storing it as a secret."
-          : "Sports provider saved.",
+        sync: syncResult,
+        syncError,
+        message,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = errorMessage(error);
       console.error("Failed to create provider:", error);
       return res.status(500).json({
-        error: error instanceof Error ? error.message : "Failed to create provider",
+        error: message === "Unknown provider error" ? "Failed to create provider" : message,
       });
     }
   }
@@ -137,12 +175,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (error) throw error;
 
-      return res.status(200).json({ provider: sanitizeProvider(data) });
-    } catch (error: any) {
+      let syncResult: Awaited<ReturnType<typeof syncSportsProvider>> | null = null;
+      let syncError: string | null = null;
+      if (Boolean(isEnabled)) {
+        try {
+          syncResult = await syncSportsProvider(data as ManagedSportsProvider, "sync");
+        } catch (syncFailure) {
+          syncError = errorMessage(syncFailure);
+        }
+      }
+
+      return res.status(200).json({
+        provider: sanitizeProvider(data),
+        sync: syncResult,
+        syncError,
+      });
+    } catch (error: unknown) {
       console.error("Failed to update provider:", error);
       return res.status(500).json({
         error: "Failed to update provider",
-        details: error.message,
+        details: errorMessage(error),
       });
     }
   }
@@ -163,11 +215,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (error) throw error;
 
       return res.status(200).json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to delete provider:", error);
       return res.status(500).json({
         error: "Failed to delete provider",
-        details: error.message,
+        details: errorMessage(error),
       });
     }
   }
