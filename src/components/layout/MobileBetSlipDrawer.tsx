@@ -119,7 +119,7 @@ export function MobileBetSlipDrawer({
       />
 
       {/* Drawer */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border shadow-2xl lg:hidden animate-in slide-in-from-bottom duration-300">
+      <div className="fixed inset-x-0 bottom-0 z-50 w-screen max-w-full overflow-x-hidden bg-surface border-t border-border shadow-2xl lg:hidden animate-in slide-in-from-bottom duration-300">
         {/* Handle */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -158,7 +158,7 @@ export function MobileBetSlipDrawer({
 
         {/* Content */}
         {isExpanded && (
-          <div className="max-h-[70vh] flex flex-col">
+          <div className="max-h-[70dvh] min-w-0 overflow-x-hidden flex flex-col">
             {selections.length === 0 ? (
               /* Empty State */
               <div className="flex items-center justify-center p-8">
@@ -251,7 +251,7 @@ export function MobileBetSlipDrawer({
                 </ScrollArea>
 
                 {/* Stake Input */}
-                <div className="p-3 border-t border-border space-y-2 bg-surface/50">
+                <div className="min-w-0 p-3 border-t border-border space-y-2 bg-surface/50">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                       Stake
