@@ -1,5 +1,6 @@
--- Deployment copy: disable the legacy automatic $10,000 signup credit.
--- Apply this file in the Supabase SQL Editor for an existing installation.
+-- Deployment copy: disable the legacy automatic $10,000 signup credit and clean untouched legacy accounts.
+-- Existing customers with bets or any other wallet activity are not modified.
+-- This reverses BOTH legacy postings: profile opening balance and welcome transaction.
 
 ALTER TABLE public.profiles
   ALTER COLUMN demo_balance SET DEFAULT 0.00;
@@ -10,19 +11,23 @@ FROM public.profiles p
 WHERE COALESCE(p.is_admin,FALSE)=FALSE
   AND COALESCE(p.demo_balance,0)=10000.00
   AND EXISTS (
-    SELECT 1 FROM public.wallet_transactions wt
+    SELECT 1
+    FROM public.wallet_transactions wt
     WHERE wt.user_id=p.id
       AND wt.amount=10000.00
       AND wt.description='Welcome bonus - Demo credits'
   )
   AND NOT EXISTS (
-    SELECT 1 FROM public.wallet_transactions wt
+    SELECT 1
+    FROM public.wallet_transactions wt
     WHERE wt.user_id=p.id
-      AND NOT (wt.amount=10000.00 AND wt.description='Welcome bonus - Demo credits')
+      AND NOT (
+        wt.amount=10000.00
+        AND wt.description='Welcome bonus - Demo credits'
+      )
   )
-  AND NOT EXISTS (SELECT 1 FROM public.bets b WHERE b.user_id=p.id)
   AND NOT EXISTS (
-    SELECT 1 FROM public.admin_balance_adjustments aba WHERE aba.user_id=p.id
+    SELECT 1 FROM public.bets b WHERE b.user_id=p.id
   );
 
 DO $cleanup$
@@ -30,43 +35,64 @@ BEGIN
   IF to_regclass('public.ledger_accounts') IS NOT NULL
      AND to_regclass('public.ledger_journals') IS NOT NULL
      AND to_regclass('public.ledger_postings') IS NOT NULL THEN
+
+    -- Reverse every account impact made by the two legacy journals.
     UPDATE public.ledger_accounts account
-    SET balance=account.balance-posting_delta.total_amount,updated_at=NOW()
+    SET balance=account.balance-posting_delta.total_amount,
+        updated_at=NOW()
     FROM (
       SELECT posting.account_id,SUM(posting.amount) AS total_amount
       FROM public.ledger_postings posting
       JOIN public.ledger_journals journal ON journal.id=posting.journal_id
-      JOIN public.wallet_transactions transaction_record
-        ON transaction_record.id=journal.source_transaction_id
-      JOIN legacy_welcome_credit_users legacy ON legacy.id=transaction_record.user_id
-      WHERE transaction_record.amount=10000.00
-        AND transaction_record.description='Welcome bonus - Demo credits'
+      WHERE journal.idempotency_key IN (
+          SELECT 'profile-opening:'||legacy.id::TEXT
+          FROM legacy_welcome_credit_users legacy
+        )
+        OR journal.source_transaction_id IN (
+          SELECT wt.id
+          FROM public.wallet_transactions wt
+          JOIN legacy_welcome_credit_users legacy ON legacy.id=wt.user_id
+          WHERE wt.amount=10000.00
+            AND wt.description='Welcome bonus - Demo credits'
+        )
       GROUP BY posting.account_id
     ) posting_delta
     WHERE account.id=posting_delta.account_id;
 
     DELETE FROM public.ledger_postings posting
-    USING public.ledger_journals journal,
-          public.wallet_transactions transaction_record,
-          legacy_welcome_credit_users legacy
+    USING public.ledger_journals journal
     WHERE posting.journal_id=journal.id
-      AND journal.source_transaction_id=transaction_record.id
-      AND transaction_record.user_id=legacy.id
-      AND transaction_record.amount=10000.00
-      AND transaction_record.description='Welcome bonus - Demo credits';
+      AND (
+        journal.idempotency_key IN (
+          SELECT 'profile-opening:'||legacy.id::TEXT
+          FROM legacy_welcome_credit_users legacy
+        )
+        OR journal.source_transaction_id IN (
+          SELECT wt.id
+          FROM public.wallet_transactions wt
+          JOIN legacy_welcome_credit_users legacy ON legacy.id=wt.user_id
+          WHERE wt.amount=10000.00
+            AND wt.description='Welcome bonus - Demo credits'
+        )
+      );
 
     DELETE FROM public.ledger_journals journal
-    USING public.wallet_transactions transaction_record,
-          legacy_welcome_credit_users legacy
-    WHERE journal.source_transaction_id=transaction_record.id
-      AND transaction_record.user_id=legacy.id
-      AND transaction_record.amount=10000.00
-      AND transaction_record.description='Welcome bonus - Demo credits';
+    WHERE journal.idempotency_key IN (
+        SELECT 'profile-opening:'||legacy.id::TEXT
+        FROM legacy_welcome_credit_users legacy
+      )
+      OR journal.source_transaction_id IN (
+        SELECT wt.id
+        FROM public.wallet_transactions wt
+        JOIN legacy_welcome_credit_users legacy ON legacy.id=wt.user_id
+        WHERE wt.amount=10000.00
+          AND wt.description='Welcome bonus - Demo credits'
+      );
 
-    UPDATE public.ledger_accounts
+    UPDATE public.ledger_accounts account
     SET balance=0.00,updated_at=NOW()
-    WHERE user_id IN (SELECT id FROM legacy_welcome_credit_users)
-      AND account_code IN ('cash','bonus');
+    WHERE account.user_id IN (SELECT id FROM legacy_welcome_credit_users)
+      AND account.account_code IN ('cash','bonus','locked');
   END IF;
 
   IF to_regclass('public.wallet_accounts') IS NOT NULL THEN
@@ -125,6 +151,7 @@ BEGIN
     SUBSTRING(MD5(RANDOM()::TEXT || NEW.id::TEXT) FROM 1 FOR 8)
   )
   ON CONFLICT (id) DO NOTHING;
+
   RETURN NEW;
 END;
 $$;
