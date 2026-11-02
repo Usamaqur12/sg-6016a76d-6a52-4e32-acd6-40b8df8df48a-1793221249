@@ -47,7 +47,7 @@ export function SecuritySettings() {
     }
     const { data, error: enrollError } = await supabase.auth.mfa.enroll({ 
       factorType: "totp", 
-      friendlyName: "PrimeBet authenticator" 
+      friendlyName: "MindBet Pro authenticator"
     });
     if (enrollError) setError(enrollError.message);
     else setEnrollment({ factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret });
@@ -206,7 +206,7 @@ export function SecuritySettings() {
                 </div>
                 <div className="pl-8 space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Open your authenticator app and scan this QR code to add PrimeBet to your app.
+                    Open your authenticator app and scan this QR code to add MindBet Pro to your app.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4 items-start">
                     <div className="rounded-lg border-2 border-border bg-white p-3">

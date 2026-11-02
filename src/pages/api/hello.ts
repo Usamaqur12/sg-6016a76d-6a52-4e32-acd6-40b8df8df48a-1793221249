@@ -13,7 +13,7 @@ export default function handler(
 ) {
   res.status(200).json({
     status: "ok",
-    message: "PrimeBet API is running",
+    message: "MindBet Pro API is running",
     timestamp: new Date().toISOString(),
   });
 }

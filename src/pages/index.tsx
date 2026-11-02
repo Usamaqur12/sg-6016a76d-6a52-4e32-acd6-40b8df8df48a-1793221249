@@ -200,7 +200,7 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-background pb-14 lg:pb-0">
       <SEO 
         title="Premier Sports Betting & Casino"
-        description="Experience the thrill of sports betting and casino games with PrimeBet. Live odds, instant payouts, and 24/7 support."
+        description="Experience sports betting and casino games with MindBet Pro. Live odds, account controls, and 24/7 support."
       />
 
       <Header

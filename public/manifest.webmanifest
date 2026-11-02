@@ -1,7 +1,7 @@
 {
-  "name": "PrimeBet Demo Sportsbook",
-  "short_name": "PrimeBet",
-  "description": "Play-money sportsbook demo with live events, bet tracking and responsible-play controls.",
+  "name": "MindBet Pro",
+  "short_name": "MindBet Pro",
+  "description": "Sportsbook, live betting and casino platform.",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
@@ -10,6 +10,6 @@
   "orientation": "portrait-primary",
   "categories": ["sports", "entertainment"],
   "icons": [
-    { "src": "/primebet-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/mindbetpro-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
 }

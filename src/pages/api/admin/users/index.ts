@@ -61,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const userId = createdUser.user.id;
-    const { error: profileError } = await supabaseAdmin.from("profiles").upsert({
+    const { error: profileError } = await (supabaseAdmin as any).from("profiles").upsert({
       id: userId,
       email,
       full_name: fullName || null,
@@ -69,6 +69,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       admin_role: null,
       is_suspended: false,
       demo_balance: 0,
+      account_status: "pending_kyc",
+      kyc_activation_override: false,
     }, { onConflict: "id" });
 
     if (profileError) {
@@ -95,7 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(201).json({
       success: true,
       user: { id: userId, email, fullName: fullName || null },
-      message: "Customer login created with $0.00 starting balance",
+      message: "Customer login created with $0.00 balance. KYC approval or an admin activation override is required.",
     });
   } catch (error) {
     console.error("User creation failed", error);

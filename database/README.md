@@ -1,6 +1,6 @@
-# PrimeBet database deployment
+# MindBet Pro database deployment
 
-PrimeBet uses **Supabase PostgreSQL**, Supabase Auth and Supabase Storage. A normal
+MindBet Pro uses **Supabase PostgreSQL**, Supabase Auth and Supabase Storage. A normal
 cPanel MySQL database is not compatible with this application. The Node.js app
 on cPanel connects to a separate production Supabase project over HTTPS.
 
@@ -26,7 +26,7 @@ play-money fixtures for staging demonstrations only.
 
 ## Existing Supabase project
 
-Do not run the complete installer against an existing PrimeBet database. Apply
+Do not run the complete installer against an existing MindBet Pro database. Apply
 only missing files from `supabase/migrations` in filename order, then run the
 verification SQL.
 

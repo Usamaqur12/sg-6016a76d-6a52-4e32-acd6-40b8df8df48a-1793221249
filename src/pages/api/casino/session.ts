@@ -23,11 +23,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: auth } = await admin.auth.getUser(token);
   if (!auth.user) return res.status(401).json({ error: "Invalid session" });
   const [{ data: profile }, { data: game }] = await Promise.all([
-    (admin as any).from("profiles").select("id,kyc_status,is_suspended,is_self_excluded,self_exclusion_until").eq("id", auth.user.id).single(),
+    (admin as any).from("profiles").select("id,kyc_status,kyc_activation_override,account_status,is_suspended,wallet_frozen,betting_disabled,is_self_excluded,self_exclusion_until").eq("id", auth.user.id).single(),
     (admin as any).from("casino_games").select("id,external_game_id,provider_id,casino_providers!inner(is_enabled)").eq("id", parsed.data.gameId).eq("is_active", true).single(),
   ]);
   const excluded = profile?.is_self_excluded || (profile?.self_exclusion_until && new Date(profile.self_exclusion_until).getTime() > Date.now());
-  if (!profile || profile.kyc_status !== "approved" || profile.is_suspended || excluded) return res.status(403).json({ error: "Approved KYC and an active, unrestricted account are required" });
+  const activated = profile?.account_status === "active" && (profile.kyc_status === "approved" || profile.kyc_activation_override);
+  if (!profile || !activated || profile.is_suspended || profile.wallet_frozen || profile.betting_disabled || excluded) return res.status(403).json({ error: "An activated, unrestricted account is required" });
   if (!game || !game.casino_providers?.is_enabled) return res.status(404).json({ error: "Game is unavailable" });
 
   const sessionId = randomUUID();

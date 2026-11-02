@@ -10,7 +10,7 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   const check = useCallback(async () => {
     if (router.pathname.startsWith("/admin")) { setState({ enabled: false, message: "" }); return; }
     const { data } = await (supabase as any).from("feature_flags").select("is_enabled,config").eq("key", "maintenance_mode").maybeSingle();
-    setState({ enabled: Boolean(data?.is_enabled), message: String(data?.config?.message || "PrimeBet is receiving an upgrade. Please check back shortly.") });
+    setState({ enabled: Boolean(data?.is_enabled), message: String(data?.config?.message || "MindBet Pro is receiving an upgrade. Please check back shortly.") });
   }, [router.pathname]);
   useEffect(() => { void check(); const timer = window.setInterval(() => void check(), 30_000); return () => window.clearInterval(timer); }, [check]);
   if (!state.enabled) return <>{children}</>;

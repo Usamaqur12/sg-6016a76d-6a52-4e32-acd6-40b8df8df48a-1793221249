@@ -2,7 +2,7 @@ import { InfoPageLayout, InfoSection } from "@/components/content/InfoPageLayout
 
 export default function HelpPage() {
   return (
-    <InfoPageLayout title="Help Center" intro="Quick answers for the current PrimeBet demonstration.">
+    <InfoPageLayout title="Help Center" intro="Quick answers about MindBet Pro accounts, verification and platform features.">
       <InfoSection title="Is this real money?">
         <p>No. Balances are demonstration credits and have no cash value.</p>
       </InfoSection>

@@ -2,7 +2,7 @@ import { InfoPageLayout, InfoSection } from "@/components/content/InfoPageLayout
 
 export default function TermsPage() {
   return (
-    <InfoPageLayout title="Demo Terms" intro="These interim terms apply only to the pre-launch play-money demonstration.">
+    <InfoPageLayout title="Terms & Conditions" intro="These terms govern access to MindBet Pro and its account, sportsbook, casino and promotional features.">
       <InfoSection title="No gambling contract">
         <p>Demo credits are not money, cannot be purchased or withdrawn, and do not create a claim to prizes or payouts.</p>
       </InfoSection>

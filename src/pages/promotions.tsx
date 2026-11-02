@@ -108,7 +108,7 @@ export default function PromotionsPage() {
               </CardContent></Card>;
             })}
           </div>
-          <p className="text-xs text-center text-muted-foreground">All balances and rewards are play-money demo credits. No cash value.</p>
+          <p className="text-xs text-center text-muted-foreground">All promotions are subject to eligibility, wagering, expiry and account-verification rules.</p>
         </div>
       </main>
       <Footer /><MobileBottomNav />

@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userId = parsedId.data;
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("id,email,full_name,kyc_status,is_suspended,created_at,is_admin,account_status,wallet_frozen,betting_disabled,deposits_disabled,withdrawals_disabled,account_deleted_at,control_reason,account_anonymized_at,anonymization_reference")
+      .select("id,email,full_name,kyc_status,kyc_activation_override,is_suspended,created_at,is_admin,account_status,wallet_frozen,betting_disabled,deposits_disabled,withdrawals_disabled,account_deleted_at,control_reason,account_anonymized_at,anonymization_reference")
       .eq("id", userId)
       .maybeSingle();
     if (profileError) throw profileError;

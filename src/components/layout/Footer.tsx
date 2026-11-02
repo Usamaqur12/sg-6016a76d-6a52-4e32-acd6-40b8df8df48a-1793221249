@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Facebook, Twitter, Instagram, Youtube } from "lucide-react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 export function Footer() {
   const footerLinks = {
@@ -37,14 +38,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
           {/* Brand */}
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded bg-gradient-to-br from-primary via-primary to-primary-bright flex items-center justify-center glow-green-sm">
-                <span className="text-sm font-black text-background">PB</span>
-              </div>
-              <div>
-                <span className="text-lg font-black tracking-tight">Prime<span className="text-primary">Bet</span></span>
-              </div>
-            </div>
+            <BrandLogo className="mb-3" />
             <p className="text-sm text-muted-foreground">
               Premium sportsbook experience with the best odds, live betting, and casino games.
             </p>
@@ -111,7 +105,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="pt-6 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            © 2026 PrimeBet. All rights reserved.
+            © 2026 MindBet Pro. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <span className="text-xs text-subtle-foreground">18+ Only</span>

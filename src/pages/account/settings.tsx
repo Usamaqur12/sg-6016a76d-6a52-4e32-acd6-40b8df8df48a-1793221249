@@ -99,7 +99,7 @@ export default function Settings() {
           toast({ title: "Browser alerts enabled", description: "This device is registered for secure push delivery." });
         } catch (error) { toast({ title: "Permission granted, enrollment pending", description: error instanceof Error ? error.message : "Push enrollment failed", variant: "destructive" }); }
       } else {
-        new window.Notification("PrimeBet alerts ready", { body: "Permission is active. Server delivery will start after VAPID configuration." });
+        new window.Notification("MindBet Pro alerts ready", { body: "Permission is active. Server delivery will start after VAPID configuration." });
         toast({ title: "Browser permission enabled", description: "Add the production VAPID public key to activate remote delivery." });
       }
     } else toast({ title: "Browser alerts were not enabled", description: permission === "denied" ? "You can change this permission in your browser settings." : undefined });

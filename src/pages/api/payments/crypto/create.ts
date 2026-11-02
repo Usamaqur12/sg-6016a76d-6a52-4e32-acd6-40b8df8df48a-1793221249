@@ -65,10 +65,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { amount, payCurrency, idempotencyKey } = parsed.data;
   const userId = authData.user.id;
   const { data: profile, error: profileError } = await (admin as any).from("profiles")
-    .select("id,kyc_status,is_suspended,self_exclusion_until,deposit_limit")
+    .select("id,kyc_status,kyc_activation_override,account_status,is_suspended,wallet_frozen,deposits_disabled,self_exclusion_until,deposit_limit")
     .eq("id", userId).single();
-  if (profileError || !profile || profile.kyc_status !== "approved" || profile.is_suspended) {
-    return res.status(403).json({ error: "Approved KYC and an active account are required" });
+  const activated = profile?.account_status === "active" && (profile.kyc_status === "approved" || profile.kyc_activation_override);
+  if (profileError || !profile || !activated || profile.is_suspended || profile.wallet_frozen || profile.deposits_disabled) {
+    return res.status(403).json({ error: "An activated account with deposits enabled is required" });
   }
   if (profile.self_exclusion_until && new Date(profile.self_exclusion_until).getTime() > Date.now()) {
     return res.status(403).json({ error: "Deposits are unavailable during self-exclusion" });
@@ -105,7 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         pay_currency: payCurrency,
         ipn_callback_url: `${siteUrl.replace(/\/$/, "")}/api/payments/crypto/nowpayments-webhook`,
         order_id: invoiceId,
-        order_description: "PrimeBet wallet deposit",
+        order_description: "MindBet Pro wallet deposit",
         is_fixed_rate: true,
         is_fee_paid_by_user: true,
       }),

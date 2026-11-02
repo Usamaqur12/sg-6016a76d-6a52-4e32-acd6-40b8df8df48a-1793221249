@@ -3,7 +3,7 @@ import { InfoPageLayout, InfoSection } from "@/components/content/InfoPageLayout
 
 export default function ResponsibleGamblingPage() {
   return (
-    <InfoPageLayout title="Responsible Play" intro="Keep play controlled, intentional and within limits—even when using demo credits.">
+    <InfoPageLayout title="Responsible Play" intro="Keep play controlled, intentional and within limits at all times.">
       <InfoSection title="Practical safeguards">
         <p>Set time and stake limits, take regular breaks, never chase losses, and do not treat betting as income.</p>
       </InfoSection>

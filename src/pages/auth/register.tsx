@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
@@ -119,12 +120,10 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4 py-10">
       <Card className="w-full max-w-md border-border bg-surface">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/60">
-            <UserPlus className="h-8 w-8 text-white" />
-          </div>
-          <CardTitle className="text-2xl">Create your PrimeBet account</CardTitle>
+          <div className="mx-auto mb-4 flex justify-center"><BrandLogo href="/" /></div>
+          <CardTitle className="text-2xl">Create your MindBet Pro account</CardTitle>
           <CardDescription>
-            Register with your email. Verification is required before login.
+            Verify your email, then complete KYC to activate betting and wallet features.
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -265,6 +265,17 @@ export default function KYCPage() {
       
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto space-y-6">
+          {profile?.account_status === "pending_kyc" && (
+            <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-4">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+              <div>
+                <p className="font-semibold">Account activation requires KYC approval</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  You can upload and review your documents now. Betting, wallet transactions, deposits and withdrawals remain locked until KYC is approved or an administrator activates the account.
+                </p>
+              </div>
+            </div>
+          )}
           {/* Header */}
           <div>
             <h1 className="text-3xl font-bold mb-2">KYC Verification</h1>

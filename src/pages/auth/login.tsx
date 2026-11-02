@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, EyeOff, AlertCircle, LogIn, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 function isConfirmedFlag(value: string | string[] | undefined): boolean {
   return value === "1";
@@ -24,6 +25,7 @@ export default function LoginPage() {
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
+  const [postLoginDestination, setPostLoginDestination] = useState("/");
 
   const emailConfirmed = isConfirmedFlag(router.query.confirmed);
 
@@ -50,13 +52,17 @@ export default function LoginPage() {
 
       const { data: account } = await (supabase as any)
         .from("profiles")
-        .select("is_suspended,account_status")
+        .select("is_suspended,account_status,kyc_status")
         .eq("id", user.id)
         .maybeSingle();
       if (account?.is_suspended || account?.account_status === "closed") {
         await supabase.auth.signOut();
         throw new Error("This account is disabled. Contact support.");
       }
+      const destination = account?.account_status === "pending_kyc"
+        ? "/account/kyc?activation=required"
+        : "/";
+      setPostLoginDestination(destination);
 
       // Check MFA requirement
       const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -76,7 +82,7 @@ export default function LoginPage() {
         setMfaFactorId(factor.id);
         setMfaChallengeId(challenge.data.id);
       } else {
-        await router.push("/");
+        await router.push(destination);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to log in");
@@ -104,7 +110,7 @@ export default function LoginPage() {
     if (verifyError) {
       setError(verifyError.message);
     } else {
-      await router.push("/");
+      await router.push(postLoginDestination);
     }
 
     setLoading(false);
@@ -114,13 +120,9 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md bg-surface border-border">
         <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
-              <span className="text-3xl font-bold text-white">PB</span>
-            </div>
-          </div>
+          <div className="mb-4 flex justify-center"><BrandLogo href="/" /></div>
           <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-          <CardDescription>Log in to your PrimeBet account</CardDescription>
+          <CardDescription>Log in to your MindBet Pro account</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={mfaFactorId ? handleMfa : handleLogin} className="space-y-4">
@@ -215,7 +217,7 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
           <div className="text-sm text-center text-muted-foreground">
-            New to PrimeBet?{" "}
+            New to MindBet Pro?{" "}
             <Link href="/auth/register" className="text-primary hover:underline">
               Create an account
             </Link>

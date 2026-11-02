@@ -1,6 +1,6 @@
 const CACHE_NAME = "primebet-shell-v3";
 const OFFLINE_URL = "/offline.html";
-self.addEventListener("install", (event) => { event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL, "/primebet-icon.svg", "/manifest.webmanifest"])).catch(() => undefined)); self.skipWaiting(); });
+self.addEventListener("install", (event) => { event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL, "/mindbetpro-icon.svg", "/manifest.webmanifest"])).catch(() => undefined)); self.skipWaiting(); });
 self.addEventListener("activate", (event) => { event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))); self.clients.claim(); });
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
@@ -19,9 +19,9 @@ self.addEventListener("fetch", (event) => {
   })));
 });
 self.addEventListener("push", (event) => {
-  let payload = { title: "PrimeBet update", body: "You have a new account update.", url: "/account" };
+  let payload = { title: "MindBet Pro update", body: "You have a new account update.", url: "/account" };
   try { payload = { ...payload, ...(event.data ? event.data.json() : {}) }; } catch { if (event.data) payload.body = event.data.text(); }
-  event.waitUntil(self.registration.showNotification(payload.title, { body: payload.body, icon: "/primebet-icon.svg", badge: "/primebet-icon.svg", data: { url: payload.url || "/account" }, tag: payload.tag || "primebet-update", renotify: Boolean(payload.renotify) }));
+  event.waitUntil(self.registration.showNotification(payload.title, { body: payload.body, icon: "/mindbetpro-icon.svg", badge: "/mindbetpro-icon.svg", data: { url: payload.url || "/account" }, tag: payload.tag || "mindbetpro-update", renotify: Boolean(payload.renotify) }));
 });
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

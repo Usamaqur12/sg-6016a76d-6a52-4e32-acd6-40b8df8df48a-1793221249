@@ -68,7 +68,7 @@ export function PwaInstallBanner() {
         <Download className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold">Install PrimeBet</p>
+        <p className="text-sm font-bold">Install MindBet Pro</p>
         <p className="text-xs text-muted-foreground">Faster full-screen access from your home screen.</p>
       </div>
       <Button size="sm" onClick={() => void install()}>Install</Button>

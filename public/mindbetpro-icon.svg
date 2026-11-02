@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MindBet Pro">
+  <defs>
+    <linearGradient id="g" x1="70" y1="60" x2="442" y2="452" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6ee7b7"/>
+      <stop offset="0.55" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#06111b"/>
+  <rect x="24" y="24" width="464" height="464" rx="92" fill="url(#g)"/>
+  <path d="M104 356V154l86 102 66-102 66 102 86-102v202" fill="none" stroke="#04130f" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M306 94h104v104M306 198 410 94" fill="none" stroke="#ecfeff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="407" cy="405" r="25" fill="#fcd34d"/>
+</svg>

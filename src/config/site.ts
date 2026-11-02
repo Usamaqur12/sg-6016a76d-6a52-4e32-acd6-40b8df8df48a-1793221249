@@ -1,4 +1,6 @@
 export const siteConfig = {
-  name: "PrimeBet",
-  description: "Premier sports betting and casino platform",
+  name: "MindBet Pro",
+  description: "Sportsbook, live betting and casino platform",
+  domain: "mindbetpro.com",
+  url: "https://mindbetpro.com",
 };

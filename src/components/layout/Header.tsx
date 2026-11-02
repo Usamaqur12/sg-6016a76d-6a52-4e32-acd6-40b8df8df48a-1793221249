@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { SearchModal } from "./SearchModal";
 import { getNotifications, markAllNotificationsRead, markNotificationRead, type UserNotification } from "@/services/notificationsService";
 import { useI18n } from "@/lib/i18n";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 interface HeaderProps {
   user: { email: string; balance: number } | null;
@@ -68,15 +69,7 @@ export function Header({ user, onAuthClick }: HeaderProps) {
       <header className="header-compact">
         <div className="container h-full flex items-center justify-between gap-3 px-3">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-7 h-7 rounded bg-gradient-to-br from-primary via-primary to-primary-bright flex items-center justify-center glow-green-sm">
-              <span className="text-xs font-black text-background">PB</span>
-            </div>
-            <div className="hidden sm:block">
-              <span className="text-base font-black tracking-tight">Prime<span className="text-primary">Bet</span></span>
-              <div className="text-[9px] text-subtle-foreground font-medium -mt-0.5 tracking-wide">PREMIUM SPORTSBOOK</div>
-            </div>
-          </Link>
+          <BrandLogo compact className="flex-shrink-0 [&>span]:hidden sm:[&>span]:block" />
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-0.5 flex-1 max-w-xl">

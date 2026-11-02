@@ -11,6 +11,7 @@ import {
   Settings, LogOut, Bitcoin, LineChart, Activity, Trophy, Coins, Bell, Dices, CheckCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 type RouteRequirement = AdminArea | "super_admin";
 
@@ -160,10 +161,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       <div className="fixed inset-y-0 left-0 w-64 bg-card border-r border-border">
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="p-6 border-b border-border">
-            <Link href="/admin" className="text-2xl font-bold text-primary">
-              PrimeBet Admin
-            </Link>
+          <div className="p-5 border-b border-border">
+            <BrandLogo href="/admin" admin compact />
           </div>
 
           {/* Navigation */}

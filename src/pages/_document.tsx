@@ -8,10 +8,10 @@ export default function Document() {
       <Head>
         <SEOElements />
         <link rel="manifest" href="/manifest.webmanifest" />
-        <link rel="icon" href="/primebet-icon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/primebet-icon.svg" />
+        <link rel="icon" href="/mindbetpro-icon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/mindbetpro-icon.svg" />
         <meta name="theme-color" content="#21d07a" />
-        <meta name="application-name" content="PrimeBet" />
+        <meta name="application-name" content="MindBet Pro" />
         {/*
           CRITICAL: DO NOT REMOVE THIS SCRIPT
           The Softgen AI monitoring script is essential for core app functionality.

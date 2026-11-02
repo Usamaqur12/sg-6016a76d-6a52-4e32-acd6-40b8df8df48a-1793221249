@@ -244,7 +244,7 @@ export default function AdminDashboard() {
       <div className="p-6">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Welcome to PrimeBet Admin Portal</p>
+          <p className="text-muted-foreground mt-1">Welcome to MindBet Pro Admin Portal</p>
         </div>
 
         {loading ? (

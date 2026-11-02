@@ -104,7 +104,7 @@ export default function AviatorPage(){
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-emerald-400 shadow-[0_0_35px_rgba(34,211,238,.28)]"><Plane className="h-6 w-6 text-slate-950"/></div>
-            <div><h1 className="text-2xl font-black tracking-tight">PrimeBet <span className="text-cyan-300">Aviator</span></h1><p className="text-xs text-slate-400">Live · provably fair · instant cash-out</p></div>
+            <div><h1 className="text-2xl font-black tracking-tight">MindBet Pro <span className="text-cyan-300">Aviator</span></h1><p className="text-xs text-slate-400">Live · provably fair · instant cash-out</p></div>
           </div>
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {(game?.history||[]).slice(0,10).map(round=><div key={round.round_number} className={"shrink-0 rounded-full border px-3 py-1.5 font-mono text-xs font-black "+(Number(round.crash_multiplier)>=10?"border-fuchsia-400/40 bg-fuchsia-400/10 text-fuchsia-300":Number(round.crash_multiplier)>=2?"border-cyan-400/40 bg-cyan-400/10 text-cyan-300":"border-rose-400/40 bg-rose-400/10 text-rose-300")}>{Number(round.crash_multiplier).toFixed(2)}x</div>)}
