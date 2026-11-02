@@ -219,7 +219,7 @@ export default function AdminUsers() {
           full_name: p.full_name,
           kyc_status: p.kyc_status || "not_submitted",
           is_suspended: p.is_suspended || false,
-          account_status: p.account_status === "closed" ? "closed" : p.account_status === "pending_kyc" ? "pending_kyc" : "active",
+          account_status: p.account_status === "closed" ? "closed" : "active",
           created_at: p.created_at,
           wallet_balance: walletMap.get(p.id) || 0,
           total_bets: betCountMap.get(p.id) || 0,
@@ -265,7 +265,6 @@ export default function AdminUsers() {
   const filtered = users.filter(user => {
     if (statusFilter === "open" && user.account_status === "closed") return false;
     if (statusFilter === "active" && (user.account_status !== "active" || user.is_suspended)) return false;
-    if (statusFilter === "pending_kyc" && user.account_status !== "pending_kyc") return false;
     if (statusFilter === "suspended" && (user.account_status === "closed" || !user.is_suspended)) return false;
     if (statusFilter === "archived" && user.account_status !== "closed") return false;
     if (kycFilter !== "all" && user.kyc_status !== kycFilter) return false;
@@ -325,7 +324,6 @@ export default function AdminUsers() {
                 <SelectContent>
                   <SelectItem value="open">Open accounts</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="pending_kyc">Pending KYC activation</SelectItem>
                   <SelectItem value="suspended">Suspended</SelectItem>
                   <SelectItem value="archived">Archived</SelectItem>
                   <SelectItem value="all">All including archived</SelectItem>
@@ -418,8 +416,8 @@ export default function AdminUsers() {
                             <Ban className="h-3 w-3 mr-1" />
                             Suspended
                           </Badge>
-                        ) : user.account_status === "pending_kyc" ? (
-                          <Badge variant="outline" className="ml-2 border-warning text-warning">Pending KYC</Badge>
+                        ) : user.account_status === "closed" ? (
+                          <Badge variant="outline" className="ml-2 border-destructive text-destructive">Closed</Badge>
                         ) : null}
                       </div>
                       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
