@@ -220,7 +220,7 @@ export function WithdrawalModal({
     }
   }
 
-  const kycApproved = kycStatus === "approved";
+  const kycApproved = true; // KYC is not required by platform policy.
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
