@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Search, User, Bell, ChevronDown, Wallet, LogOut, Settings } from "lucide-react";
+import { Search, User, Bell, Wallet, LogOut, Settings, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ import { getNotifications, markAllNotificationsRead, markNotificationRead, type 
 import { useI18n } from "@/lib/i18n";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { getMyWalletBalances } from "@/services/walletService";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 interface HeaderProps {
   user: { email: string; balance: number } | null;
@@ -26,6 +27,7 @@ export function Header({ user, onAuthClick }: HeaderProps) {
   const router = useRouter();
   const { t } = useI18n();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [displayBalance, setDisplayBalance] = useState(user?.balance || 0);
   const userEmail = user?.email;
@@ -78,6 +80,49 @@ export function Header({ user, onAuthClick }: HeaderProps) {
     <>
       <header className="header-compact">
         <div className="container h-full flex items-center justify-between gap-3 px-3">
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 lg:hidden" aria-label="Open complete menu">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-[86vw] max-w-sm p-0">
+              <SheetHeader className="border-b border-border p-4 text-left">
+                <SheetTitle><BrandLogo compact /></SheetTitle>
+                <SheetDescription>Sports, casino, Aviator and account shortcuts</SheetDescription>
+              </SheetHeader>
+              <nav className="grid gap-1 p-3">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`rounded-lg px-4 py-3 text-sm font-bold transition-colors ${
+                      isActive(item.href)
+                        ? "bg-primary text-primary-foreground"
+                        : "text-foreground hover:bg-surface-elevated"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+                <div className="my-2 border-t border-border" />
+                {user ? (
+                  <>
+                    <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 text-sm font-bold hover:bg-surface-elevated">My Account</Link>
+                    <Link href="/account/wallet" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 text-sm font-bold hover:bg-surface-elevated">Wallet · ${displayBalance.toFixed(2)}</Link>
+                    <Link href="/account/bets" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 text-sm font-bold hover:bg-surface-elevated">My Bets</Link>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)} className="rounded-lg px-4 py-3 text-sm font-bold hover:bg-surface-elevated">Login</Link>
+                    <Link href="/auth/register" onClick={() => setMobileMenuOpen(false)} className="rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground">Create Account</Link>
+                  </>
+                )}
+              </nav>
+            </SheetContent>
+          </Sheet>
+
           {/* Logo */}
           <BrandLogo compact className="flex-shrink-0 [&>span]:hidden sm:[&>span]:block" />
 
