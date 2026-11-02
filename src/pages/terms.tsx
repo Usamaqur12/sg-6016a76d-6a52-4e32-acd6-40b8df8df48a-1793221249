@@ -3,8 +3,8 @@ import { InfoPageLayout, InfoSection } from "@/components/content/InfoPageLayout
 export default function TermsPage() {
   return (
     <InfoPageLayout title="Terms & Conditions" intro="These terms govern access to MindBet Pro and its account, sportsbook, casino and promotional features.">
-      <InfoSection title="No gambling contract">
-        <p>Demo credits are not money, cannot be purchased or withdrawn, and do not create a claim to prizes or payouts.</p>
+      <InfoSection title="Account funding">
+        <p>Account balances are created only through approved deposits, promotions or audited administrative adjustments. Incorrect or unauthorized credits may be corrected.</p>
       </InfoSection>
       <InfoSection title="Eligibility">
         <p>The service is intended for adults aged 18 or over and is subject to identity, age, jurisdiction and account-status checks. Access may be suspended for security, misuse or maintenance.</p>
