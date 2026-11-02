@@ -220,7 +220,7 @@ export function WithdrawalModal({
     }
   }
 
-  const kycApproved = true; // KYC is not required by platform policy.
+  const kycApproved = kycStatus === "approved";
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -236,7 +236,7 @@ export function WithdrawalModal({
           <div className="rounded-lg border border-warning/30 bg-warning/5 p-4">
             <p className="text-sm font-medium">KYC Verification Required</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Complete identity verification to withdraw funds
+              Complete identity verification before requesting a withdrawal
             </p>
           </div>
         )}
