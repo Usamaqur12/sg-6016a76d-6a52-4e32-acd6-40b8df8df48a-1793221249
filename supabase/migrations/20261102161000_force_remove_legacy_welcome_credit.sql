@@ -126,3 +126,39 @@ $protection$;
 
 SELECT COUNT(*) AS cleaned_legacy_accounts
 FROM force_legacy_credit_users;
+
+
+-- Permanently disable automatic signup/demo credit for all future customers.
+ALTER TABLE public.profiles
+  ALTER COLUMN demo_balance SET DEFAULT 0.00;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id,email,full_name,demo_balance,referral_code)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name',NEW.raw_user_meta_data->>'name'),
+    0.00,
+    SUBSTRING(MD5(RANDOM()::TEXT || NEW.id::TEXT) FROM 1 FOR 8)
+  )
+  ON CONFLICT (id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC,anon,authenticated;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+COMMENT ON FUNCTION public.handle_new_user() IS
+  'Creates a zero-balance customer profile. Automatic signup and demo credits are disabled.';
