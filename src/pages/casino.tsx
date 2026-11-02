@@ -258,12 +258,12 @@ export default function CasinoPage() {
         onAuthClick={handleAuthClick}
       />
 
-      <main className="flex-1 container py-6">
+      <main className="flex-1 container px-3 sm:px-4 py-4 sm:py-6">
         {/* Hero Banner */}
         <Card className="mb-6 bg-gradient-to-r from-gold/20 to-gold/5 border-gold/20">
-          <CardContent className="p-8 flex items-center justify-between">
+          <CardContent className="p-5 sm:p-8 flex items-center justify-between">
             <div>
-              <h1 className="text-4xl font-bold mb-2">Casino Lobby</h1>
+              <h1 className="text-2xl sm:text-4xl font-bold mb-2">Casino Lobby</h1>
               <p className="text-lg text-muted-foreground mb-4">
                 {casinoEnabled ? "MindBet Originals and licensed-provider catalogue" : "MindBet Mines is available now"}
               </p>
@@ -280,7 +280,7 @@ export default function CasinoPage() {
         {/* Category Filter */}
         <div className="mb-6">
           <Tabs value={category} onValueChange={setCategory}>
-            <TabsList className="bg-surface">
+            <TabsList className="bg-surface w-full justify-start overflow-x-auto overflow-y-hidden">
               <TabsTrigger value="all" className="gap-2">
                 <TrendingUp className="h-4 w-4" />
                 All Games
@@ -312,15 +312,15 @@ export default function CasinoPage() {
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
               {displayedGames.filter(g => g.popular).slice(0, 6).map((game) => (
-                <Card key={game.id} className="group cursor-pointer surface-hover overflow-hidden">
+                <Card key={game.id} className="group cursor-pointer surface-hover overflow-hidden active:scale-[0.99] transition-transform" onClick={() => void handlePlayGame(game.id)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.currentTarget === event.target && (event.key === "Enter" || event.key === " ")) void handlePlayGame(game.id); }}>
                   <CardContent className="p-0">
                     <div className="aspect-square bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-6xl relative overflow-hidden">
                       {game.image}
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/45 opacity-100 md:bg-black/60 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <Button
                           size="sm"
                           className="gap-2"
-                          onClick={() => handlePlayGame(game.id)}
+                          onClick={(event) => { event.stopPropagation(); void handlePlayGame(game.id); }}
                         >
                           <Play className="h-4 w-4" />
                           {launchingGame === String(game.id) ? "Launching..." : "Play"}
@@ -368,15 +368,15 @@ export default function CasinoPage() {
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
             {filteredGames.map((game) => (
-              <Card key={game.id} className="group cursor-pointer surface-hover overflow-hidden">
+              <Card key={game.id} className="group cursor-pointer surface-hover overflow-hidden active:scale-[0.99] transition-transform" onClick={() => void handlePlayGame(game.id)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.currentTarget === event.target && (event.key === "Enter" || event.key === " ")) void handlePlayGame(game.id); }}>
                 <CardContent className="p-0">
                   <div className="aspect-square bg-gradient-to-br from-muted/20 to-muted/5 flex items-center justify-center text-6xl relative overflow-hidden">
                     {game.image}
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/45 opacity-100 md:bg-black/60 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <Button
                         size="sm"
                         className="gap-2"
-                        onClick={() => handlePlayGame(game.id)}
+                        onClick={(event) => { event.stopPropagation(); void handlePlayGame(game.id); }}
                       >
                         <Play className="h-4 w-4" />
                           {launchingGame === String(game.id) ? "Launching..." : "Play"}
