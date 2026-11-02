@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { generateIdempotencyKey } from "./idempotencyService";
 import { checkSelfExclusion, checkStakeLimits } from "./responsibleGamingService";
 import { checkBetBuilderCompatibility } from "./betBuilderService";
+import { getMyWalletBalances } from "./walletService";
 
 /**
  * ENHANCED BETTING SERVICE WITH ADVANCED VALIDATION
@@ -70,6 +71,12 @@ export async function placeBet(
 
     if (!Number.isFinite(stake) || stake <= 0 || selections.length === 0) {
       return { success: false, error: "Invalid bet details", result: "rejected" as const };
+    }
+
+    const walletResult = await getMyWalletBalances();
+    const availableBalance = walletResult.balances?.available || 0;
+    if (stake > availableBalance) {
+      return { success: false, error: "Insufficient funded balance", result: "rejected" as const };
     }
 
     if (betType === "system" && (selections.length < 3 || systemSize < 2 || systemSize >= selections.length)) {
