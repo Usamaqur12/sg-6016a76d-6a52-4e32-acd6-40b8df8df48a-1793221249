@@ -1,0 +1,268 @@
+-- MindBet Pro existing-database patch
+-- Applies KYC-first activation and removes untouched legacy welcome/demo credit.
+-- Safe to run from the Supabase SQL Editor after the earlier ordered migrations.
+
+-- ============================================================================
+-- KYC-FIRST CUSTOMER ACTIVATION
+-- ============================================================================
+
+-- KYC-first customer activation with an audited admin override.
+-- Customers may sign in to submit KYC, but transactional activity remains blocked
+-- until KYC is approved or an admin explicitly enables the override.
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS kyc_activation_override BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_account_status_check;
+ALTER TABLE public.profiles
+  ADD CONSTRAINT profiles_account_status_check
+  CHECK (account_status IN ('pending_kyc','active','closed'));
+
+ALTER TABLE public.profiles ALTER COLUMN account_status SET DEFAULT 'pending_kyc';
+
+UPDATE public.profiles
+SET account_status = CASE
+  WHEN COALESCE(is_admin,FALSE) THEN 'active'
+  WHEN account_status='closed' THEN 'closed'
+  WHEN kyc_status='approved' OR kyc_activation_override THEN 'active'
+  ELSE 'pending_kyc'
+END,
+updated_at = NOW();
+
+CREATE OR REPLACE FUNCTION public.protect_kyc_activation_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=public
+AS $$
+BEGIN
+  IF NOT public.is_service_role() AND NOT public.is_admin() THEN
+    IF NEW.kyc_activation_override IS DISTINCT FROM OLD.kyc_activation_override
+      OR NEW.account_status IS DISTINCT FROM OLD.account_status
+    THEN
+      RAISE EXCEPTION 'Only an administrator can change customer activation';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+DROP TRIGGER IF EXISTS a_protect_kyc_activation_fields ON public.profiles;
+CREATE TRIGGER a_protect_kyc_activation_fields
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.protect_kyc_activation_fields();
+
+CREATE OR REPLACE FUNCTION public.sync_customer_kyc_activation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=public
+AS $$
+BEGIN
+  IF COALESCE(NEW.is_admin,FALSE) THEN
+    NEW.account_status := 'active';
+    RETURN NEW;
+  END IF;
+
+  IF NEW.account_status='closed' THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.kyc_status='approved' OR COALESCE(NEW.kyc_activation_override,FALSE) THEN
+    NEW.account_status := 'active';
+  ELSE
+    NEW.account_status := 'pending_kyc';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+DROP TRIGGER IF EXISTS z_sync_customer_kyc_activation ON public.profiles;
+CREATE TRIGGER z_sync_customer_kyc_activation
+  BEFORE INSERT OR UPDATE OF kyc_status,kyc_activation_override,account_status,is_admin
+  ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.sync_customer_kyc_activation();
+
+CREATE INDEX IF NOT EXISTS profiles_kyc_activation_idx
+  ON public.profiles(account_status,kyc_status,kyc_activation_override)
+  WHERE COALESCE(is_admin,FALSE)=FALSE;
+
+COMMENT ON COLUMN public.profiles.kyc_activation_override IS
+  'Audited administrator override allowing an unverified customer to use an active account.';
+
+
+-- ============================================================================
+-- REMOVE LEGACY WELCOME CREDIT AND DISABLE FUTURE AUTOMATIC CREDIT
+-- ============================================================================
+
+-- Disable the legacy automatic $10,000 signup credit and clean untouched legacy accounts.
+-- Existing customers with bets or any other wallet activity are not modified.
+-- This reverses BOTH legacy postings: profile opening balance and welcome transaction.
+
+ALTER TABLE public.profiles
+  ALTER COLUMN demo_balance SET DEFAULT 0.00;
+
+CREATE TEMP TABLE legacy_welcome_credit_users ON COMMIT DROP AS
+SELECT p.id
+FROM public.profiles p
+WHERE COALESCE(p.is_admin,FALSE)=FALSE
+  AND COALESCE(p.demo_balance,0)=10000.00
+  AND EXISTS (
+    SELECT 1
+    FROM public.wallet_transactions wt
+    WHERE wt.user_id=p.id
+      AND wt.amount=10000.00
+      AND wt.description='Welcome bonus - Demo credits'
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.wallet_transactions wt
+    WHERE wt.user_id=p.id
+      AND NOT (
+        wt.amount=10000.00
+        AND wt.description='Welcome bonus - Demo credits'
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM public.bets b WHERE b.user_id=p.id
+  );
+
+DO $cleanup$
+BEGIN
+  IF to_regclass('public.ledger_accounts') IS NOT NULL
+     AND to_regclass('public.ledger_journals') IS NOT NULL
+     AND to_regclass('public.ledger_postings') IS NOT NULL THEN
+
+    -- Reverse every account impact made by the two legacy journals.
+    UPDATE public.ledger_accounts account
+    SET balance=account.balance-posting_delta.total_amount,
+        updated_at=NOW()
+    FROM (
+      SELECT posting.account_id,SUM(posting.amount) AS total_amount
+      FROM public.ledger_postings posting
+      JOIN public.ledger_journals journal ON journal.id=posting.journal_id
+      WHERE journal.idempotency_key IN (
+          SELECT 'profile-opening:'||legacy.id::TEXT
+          FROM legacy_welcome_credit_users legacy
+        )
+        OR journal.source_transaction_id IN (
+          SELECT wt.id
+          FROM public.wallet_transactions wt
+          JOIN legacy_welcome_credit_users legacy ON legacy.id=wt.user_id
+          WHERE wt.amount=10000.00
+            AND wt.description='Welcome bonus - Demo credits'
+        )
+      GROUP BY posting.account_id
+    ) posting_delta
+    WHERE account.id=posting_delta.account_id;
+
+    DELETE FROM public.ledger_postings posting
+    USING public.ledger_journals journal
+    WHERE posting.journal_id=journal.id
+      AND (
+        journal.idempotency_key IN (
+          SELECT 'profile-opening:'||legacy.id::TEXT
+          FROM legacy_welcome_credit_users legacy
+        )
+        OR journal.source_transaction_id IN (
+          SELECT wt.id
+          FROM public.wallet_transactions wt
+          JOIN legacy_welcome_credit_users legacy ON legacy.id=wt.user_id
+          WHERE wt.amount=10000.00
+            AND wt.description='Welcome bonus - Demo credits'
+        )
+      );
+
+    DELETE FROM public.ledger_journals journal
+    WHERE journal.idempotency_key IN (
+        SELECT 'profile-opening:'||legacy.id::TEXT
+        FROM legacy_welcome_credit_users legacy
+      )
+      OR journal.source_transaction_id IN (
+        SELECT wt.id
+        FROM public.wallet_transactions wt
+        JOIN legacy_welcome_credit_users legacy ON legacy.id=wt.user_id
+        WHERE wt.amount=10000.00
+          AND wt.description='Welcome bonus - Demo credits'
+      );
+
+    UPDATE public.ledger_accounts account
+    SET balance=0.00,updated_at=NOW()
+    WHERE account.user_id IN (SELECT id FROM legacy_welcome_credit_users)
+      AND account.account_code IN ('cash','bonus','locked');
+  END IF;
+
+  IF to_regclass('public.wallet_accounts') IS NOT NULL THEN
+    BEGIN
+      EXECUTE 'UPDATE public.wallet_accounts
+        SET balance=0.00,bonus_balance=0.00,updated_at=NOW()
+        WHERE user_id IN (SELECT id FROM legacy_welcome_credit_users)';
+    EXCEPTION WHEN undefined_column THEN
+      BEGIN
+        EXECUTE 'UPDATE public.wallet_accounts
+          SET balance=0.00,updated_at=NOW()
+          WHERE user_id IN (SELECT id FROM legacy_welcome_credit_users)';
+      EXCEPTION WHEN undefined_column THEN NULL;
+      END;
+    END;
+  END IF;
+END
+$cleanup$;
+
+DELETE FROM public.wallet_transactions transaction_record
+USING legacy_welcome_credit_users legacy
+WHERE transaction_record.user_id=legacy.id
+  AND transaction_record.amount=10000.00
+  AND transaction_record.description='Welcome bonus - Demo credits';
+
+DROP TRIGGER IF EXISTS protect_profile_system_fields_trigger ON public.profiles;
+
+UPDATE public.profiles profile
+SET demo_balance=0.00,updated_at=NOW()
+FROM legacy_welcome_credit_users legacy
+WHERE profile.id=legacy.id;
+
+DO $protection$
+BEGIN
+  IF to_regprocedure('public.protect_profile_system_fields()') IS NOT NULL THEN
+    EXECUTE 'CREATE TRIGGER protect_profile_system_fields_trigger
+      BEFORE UPDATE ON public.profiles
+      FOR EACH ROW EXECUTE FUNCTION public.protect_profile_system_fields()';
+  END IF;
+END
+$protection$;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id,email,full_name,demo_balance,referral_code)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name',NEW.raw_user_meta_data->>'name'),
+    0.00,
+    SUBSTRING(MD5(RANDOM()::TEXT || NEW.id::TEXT) FROM 1 FOR 8)
+  )
+  ON CONFLICT (id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC,anon,authenticated;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+COMMENT ON FUNCTION public.handle_new_user() IS
+  'Creates a zero-balance customer profile. Automatic signup and demo credits are disabled.';
+
+COMMENT ON COLUMN public.profiles.demo_balance IS
+  'Legacy compatibility mirror. New customers start at zero; balances require an approved funding action.';
+
