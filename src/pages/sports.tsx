@@ -141,9 +141,11 @@ export default function Sports() {
 
   const visibleEvents = useMemo(() => {
     const requestedSport = typeof router.query.sport === "string" ? router.query.sport : null;
+    const requestedLeague = typeof router.query.league === "string" ? router.query.league : null;
     const normalizedQuery = query.trim().toLowerCase();
     const filtered = events.filter((event) => {
       if (requestedSport && event.sportSlug !== requestedSport) return false;
+      if (requestedLeague && event.league !== requestedLeague) return false;
       if (view === "live" && !event.isLive) return false;
       if (view === "upcoming" && event.isLive) return false;
       if (view === "favorites" && !favorites.includes(event.id)) return false;
@@ -163,7 +165,7 @@ export default function Sports() {
       if (left.isLive !== right.isLive) return left.isLive ? -1 : 1;
       return new Date(left.startTimeIso).getTime() - new Date(right.startTimeIso).getTime();
     });
-  }, [events, favorites, query, router.query.sport, sort, view]);
+  }, [events, favorites, query, router.query.league, router.query.sport, sort, view]);
 
   const groupedEvents = useMemo(() => {
     const groups = new Map<string, SportsbookEvent[]>();
