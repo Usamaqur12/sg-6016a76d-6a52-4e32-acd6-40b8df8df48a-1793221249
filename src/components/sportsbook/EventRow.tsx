@@ -39,8 +39,8 @@ export function EventRow({
   };
 
   return (
-    <div className="event-row px-3 py-2.5">
-      <div className="grid grid-cols-[auto_1fr_auto] lg:grid-cols-[120px_1fr_auto] gap-2 items-center">
+    <div className="event-row min-w-0 overflow-hidden px-2 py-2.5 sm:px-3">
+      <div className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-[120px_minmax(0,1fr)_auto] lg:items-center">
         {/* Time + Favorite */}
         <div className="hidden lg:flex items-center gap-2">
           <button
@@ -109,17 +109,17 @@ export function EventRow({
         </div>
 
         {/* Odds + Markets */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex w-full min-w-0 items-center gap-1.5 lg:w-auto">
           {!event.outcomes?.Home || !event.outcomes?.Away ? (
-            <div className="flex h-8 min-w-[132px] items-center justify-center rounded border border-border bg-muted/40 px-3 text-[10px] font-semibold text-muted-foreground">
+            <div className="flex h-8 min-w-0 flex-1 items-center justify-center rounded border border-border bg-muted/40 px-2 text-[10px] font-semibold text-muted-foreground">
               Scores only · odds unavailable
             </div>
           ) : event.homeOdds && event.drawOdds && event.awayOdds ? (
-            <div className="flex items-center gap-1">
+            <div className="grid min-w-0 flex-1 grid-cols-3 gap-1 lg:flex lg:flex-none lg:items-center">
               <button
                 onClick={() => onOddsClick("Home", event.homeOdds, event.outcomes?.Home)}
                 className={cn(
-                  "odds-button min-w-[52px] lg:min-w-[60px]",
+                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
                   isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Home") && "odds-button-selected"
                 )}
               >
@@ -128,7 +128,7 @@ export function EventRow({
               <button
                 onClick={() => onOddsClick("Draw", event.drawOdds, event.outcomes?.Draw)}
                 className={cn(
-                  "odds-button min-w-[52px] lg:min-w-[60px]",
+                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
                   isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Draw") && "odds-button-selected"
                 )}
               >
@@ -137,7 +137,7 @@ export function EventRow({
               <button
                 onClick={() => onOddsClick("Away", event.awayOdds, event.outcomes?.Away)}
                 className={cn(
-                  "odds-button min-w-[52px] lg:min-w-[60px]",
+                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
                   isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Away") && "odds-button-selected"
                 )}
               >
@@ -145,11 +145,11 @@ export function EventRow({
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-1">
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-1 lg:flex lg:flex-none lg:items-center">
               <button
                 onClick={() => onOddsClick("Home", event.homeOdds, event.outcomes?.Home)}
                 className={cn(
-                  "odds-button min-w-[60px]",
+                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
                   isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Home") && "odds-button-selected"
                 )}
               >
@@ -158,7 +158,7 @@ export function EventRow({
               <button
                 onClick={() => onOddsClick("Away", event.awayOdds, event.outcomes?.Away)}
                 className={cn(
-                  "odds-button min-w-[60px]",
+                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
                   isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Away") && "odds-button-selected"
                 )}
               >
@@ -171,7 +171,7 @@ export function EventRow({
             onClick={onOpenMarkets}
             size="sm"
             variant="ghost"
-            className="h-8 px-2 text-[11px] font-bold text-primary hover:text-primary-bright hover:bg-primary/10"
+            className="h-8 shrink-0 px-1.5 text-[10px] font-bold text-primary hover:text-primary-bright hover:bg-primary/10 sm:px-2 sm:text-[11px]"
           >
             +{event.marketCount}
             <ChevronRight className="h-3 w-3 ml-0.5" />
