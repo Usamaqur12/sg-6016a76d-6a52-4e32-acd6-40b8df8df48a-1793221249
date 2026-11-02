@@ -8,11 +8,13 @@ import { SEO } from "@/components/SEO";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { 
   User, 
   Wallet, 
   FileText, 
+  Shield, 
   Settings, 
   Bell,
   TrendingUp,
@@ -27,6 +29,7 @@ interface Profile {
   id: string;
   email: string;
   full_name: string | null;
+  kyc_status: string;
   balance: number;
   total_bets: number;
   total_wins: number;
@@ -54,7 +57,7 @@ export default function AccountPage() {
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, email, full_name")
+        .select("id, email, full_name, kyc_status")
         .eq("id", user.id)
         .single();
 
@@ -88,6 +91,18 @@ export default function AccountPage() {
       setLoading(false);
     }
   }
+
+  const getKycBadge = (status: string) => {
+    const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline", label: string }> = {
+      verified: { variant: "default", label: "Verified" },
+      pending: { variant: "secondary", label: "Pending" },
+      rejected: { variant: "destructive", label: "Rejected" },
+      not_submitted: { variant: "outline", label: "Not Submitted" },
+    };
+    
+    const config = variants[status] || variants.not_submitted;
+    return <Badge variant={config.variant}>{config.label}</Badge>;
+  };
 
   if (loading) {
     return (
@@ -170,12 +185,12 @@ export default function AccountPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Account Status
+                <Shield className="h-4 w-4" />
+                Withdrawal Verification
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-lg font-bold text-success">Active</div>
+              {getKycBadge(profile.kyc_status)}
             </CardContent>
           </Card>
         </div>
@@ -196,10 +211,10 @@ export default function AccountPage() {
             </Button>
           </Link>
 
-          <Link href="/account/dashboard">
+          <Link href="/account/kyc">
             <Button variant="outline" className="w-full h-24 flex-col gap-2">
-              <TrendingUp className="h-6 w-6" />
-              <span>Analytics</span>
+              <Shield className="h-6 w-6" />
+              <span>Verify for Withdrawals</span>
             </Button>
           </Link>
 
@@ -230,8 +245,8 @@ export default function AccountPage() {
               </div>
               
               <div className="flex items-center justify-between py-3 border-b">
-                <span className="text-muted-foreground">Account Status</span>
-                <span className="font-medium text-success">Active</span>
+                <span className="text-muted-foreground">Withdrawal KYC</span>
+                {getKycBadge(profile.kyc_status)}
               </div>
 
               <div className="flex items-center justify-between py-3">
@@ -248,6 +263,14 @@ export default function AccountPage() {
                 </Button>
               </Link>
               
+              {profile.kyc_status === "not_submitted" && (
+                <Link href="/account/kyc" className="flex-1">
+                  <Button className="w-full">
+                    <Shield className="h-4 w-4 mr-2" />
+                    Verify for Withdrawals
+                  </Button>
+                </Link>
+              )}
             </div>
           </CardContent>
         </Card>
