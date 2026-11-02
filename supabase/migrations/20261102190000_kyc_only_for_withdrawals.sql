@@ -333,6 +333,34 @@ COMMENT ON FUNCTION public.submit_manual_deposit_request(UUID,NUMERIC,TEXT,TEXT,
 COMMENT ON FUNCTION public.finalize_manual_deposit_approval(UUID,UUID,TEXT) IS
   'Credits maker-checker approved deposits without using KYC as a deposit gate.';
 
+CREATE OR REPLACE FUNCTION public.request_broker_payout(p_amount NUMERIC,p_destination_reference TEXT)
+RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE v_user UUID:=auth.uid(); v_broker public.brokers%ROWTYPE; v_available NUMERIC; v_reserved NUMERIC; v_id UUID;
+BEGIN
+  IF v_user IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id=v_user
+      AND kyc_status='approved'
+      AND COALESCE(is_suspended,FALSE)=FALSE
+      AND COALESCE(account_status,'active')<>'closed'
+  ) THEN
+    RAISE EXCEPTION 'Approved KYC is required for payout requests';
+  END IF;
+  SELECT * INTO v_broker FROM public.brokers WHERE user_id=v_user AND status='active' FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Active broker account required'; END IF;
+  IF p_amount<100 THEN RAISE EXCEPTION 'Minimum broker payout is 100'; END IF;
+  SELECT COALESCE(SUM(commission_amount),0) INTO v_available FROM public.broker_commissions WHERE broker_id=v_broker.id AND status IN('accrued','approved');
+  SELECT COALESCE(SUM(amount),0) INTO v_reserved FROM public.broker_payout_requests WHERE broker_id=v_broker.id AND status IN('pending','approved');
+  IF p_amount>v_available-v_reserved THEN RAISE EXCEPTION 'Payout amount exceeds available commission'; END IF;
+  INSERT INTO public.broker_payout_requests(broker_id,amount,destination_reference)
+  VALUES(v_broker.id,p_amount,NULLIF(trim(p_destination_reference),'')) RETURNING id INTO v_id;
+  RETURN v_id;
+END; $;
+
+COMMENT ON FUNCTION public.request_broker_payout(NUMERIC,TEXT) IS
+  'Creates a broker commission withdrawal request and requires approved KYC.';
+
 COMMENT ON FUNCTION public.apply_crypto_deposit_update(TEXT,TEXT,TEXT,UUID,TEXT,NUMERIC,TEXT,TEXT,NUMERIC,NUMERIC,TEXT,TEXT,JSONB) IS
   'Processes verified provider deposits for active customers without using KYC as a deposit gate.';
 
