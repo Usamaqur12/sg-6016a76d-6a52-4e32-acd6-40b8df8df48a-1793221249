@@ -133,8 +133,12 @@ export default function AdminUsers() {
   async function creditUserBalance() {
     if (!balanceUser) return;
     const amount = Number(creditAmount);
-    if (!Number.isFinite(amount) || amount < 0.01 || amount > 100000 || creditReason.trim().length < 5) {
-      toast({ title: "Invalid adjustment", description: "Enter 0.01–100000.00 and a reason of at least 5 characters.", variant: "destructive" });
+    if (!Number.isFinite(amount) || amount < 0.01 || amount > 100000) {
+      toast({ title: "Invalid amount", description: "Enter an amount from 0.01 to 100000.00.", variant: "destructive" });
+      return;
+    }
+    if (creditReason.trim().length < 5) {
+      toast({ title: "Reason is too short", description: "Enter at least 5 characters, for example: Cash deposit received.", variant: "destructive" });
       return;
     }
     setCrediting(true);
@@ -550,14 +554,40 @@ export default function AdminUsers() {
               <Input id="credit-amount" type="number" min="0.01" max="100000" step="0.01" value={creditAmount} onChange={(event) => setCreditAmount(event.target.value)} placeholder="100.00" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="credit-reason">Reason</Label>
-              <Input id="credit-reason" value={creditReason} onChange={(event) => setCreditReason(event.target.value)} maxLength={500} placeholder="Manual deposit verified" />
-              <p className="text-xs text-muted-foreground">The reason is permanently recorded in the transaction and audit log.</p>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="credit-reason">Reason (minimum 5 characters)</Label>
+                <span className={`text-xs ${creditReason.trim().length > 0 && creditReason.trim().length < 5 ? "text-destructive" : "text-muted-foreground"}`}>
+                  {creditReason.trim().length}/5 minimum
+                </span>
+              </div>
+              <Input
+                id="credit-reason"
+                value={creditReason}
+                onChange={(event) => setCreditReason(event.target.value)}
+                minLength={5}
+                maxLength={500}
+                aria-invalid={creditReason.trim().length > 0 && creditReason.trim().length < 5}
+                placeholder="Example: Cash deposit received"
+              />
+              {creditReason.trim().length > 0 && creditReason.trim().length < 5 ? (
+                <p className="text-xs text-destructive">Please enter at least 5 characters before confirming.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">The reason is permanently recorded in the transaction and audit log.</p>
+              )}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBalanceUser(null)} disabled={crediting}>Cancel</Button>
-            <Button onClick={() => void creditUserBalance()} disabled={crediting}>
+            <Button
+              onClick={() => void creditUserBalance()}
+              disabled={
+                crediting ||
+                !Number.isFinite(Number(creditAmount)) ||
+                Number(creditAmount) < 0.01 ||
+                Number(creditAmount) > 100000 ||
+                creditReason.trim().length < 5
+              }
+            >
               {crediting ? "Saving…" : balanceOperation === "add" ? "Confirm addition" : "Confirm deduction"}
             </Button>
           </DialogFooter>
