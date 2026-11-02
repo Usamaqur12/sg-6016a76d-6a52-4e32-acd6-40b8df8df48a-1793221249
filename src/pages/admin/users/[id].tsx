@@ -115,9 +115,16 @@ export default function AdminUserDetailsPage() {
   }
 
   async function updateControls(controls?: Record<string, boolean>, action?: "archive" | "restore" | "activate_without_kyc" | "require_kyc") {
-    if (!details || controlReason.trim().length < 5) {
-      toast({ title: "Reason required", description: "Enter an audit reason of at least 5 characters.", variant: "destructive" });
-      return;
+    if (!details) return;
+    let auditReason = controlReason.trim();
+    if (auditReason.length < 5) {
+      const requestedReason = window.prompt("Enter an audit reason for this account change (minimum 5 characters):", action === "activate_without_kyc" ? "Manual activation approved by administrator" : "");
+      auditReason = requestedReason?.trim() || "";
+      if (auditReason.length < 5) {
+        toast({ title: "Reason required", description: "Enter an audit reason of at least 5 characters.", variant: "destructive" });
+        return;
+      }
+      setControlReason(auditReason);
     }
     if (action === "archive" && !window.confirm("Archive this user? The account will disappear from active users and login, wallet, betting, deposits and withdrawals will be disabled.")) return;
     if (action === "activate_without_kyc" && !window.confirm("Activate this customer without approved KYC? This audited override unlocks transactional account access.")) return;
@@ -125,7 +132,7 @@ export default function AdminUserDetailsPage() {
     try {
       await adminFetch("/api/admin/users/" + details.profile.id + "/controls", {
         method: "PATCH",
-        body: JSON.stringify(action ? { action, reason: controlReason.trim() } : { controls, reason: controlReason.trim() }),
+        body: JSON.stringify(action ? { action, reason: auditReason } : { controls, reason: auditReason }),
       });
       toast({ title: action === "archive" ? "User deleted safely" : action === "restore" ? "User restored" : action === "activate_without_kyc" ? "KYC override activated" : action === "require_kyc" ? "KYC requirement restored" : "Account control updated" });
       if (action === "archive") {
