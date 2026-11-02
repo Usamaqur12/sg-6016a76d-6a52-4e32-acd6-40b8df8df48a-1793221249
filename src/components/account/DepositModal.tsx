@@ -185,7 +185,7 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
   );
   const cryptoEnabled = process.env.NEXT_PUBLIC_CRYPTO_DEPOSITS_ENABLED === "true" && providerEnabled;
   const manualMethods = paymentMethods.filter(m => m.method_type !== "provider");
-  const kycApproved = kycStatus === "approved";
+  const kycApproved = true; // KYC is not required by platform policy.
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
