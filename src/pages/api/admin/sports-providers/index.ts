@@ -6,6 +6,14 @@ import { encryptProviderSecret } from "@/lib/server/providerSecrets";
 import { providerTypes } from "@/lib/server/sportsProviders";
 import { z } from "zod";
 
+const THE_SPORTS_DB_FREE_URL = "https://www.thesportsdb.com/api/v1/json/123/searchteams.php?t=Arsenal";
+
+function isTheSportsDbFreeCredential(value: string | undefined) {
+  const candidate = value?.trim() || "";
+  return candidate === "123" ||
+    /thesportsdb\.com\/api\/v1\/json\/123(?:\/|$)/i.test(candidate);
+}
+
 const providerSchema = z.object({
   name: z.string().trim().min(2).max(100),
   providerType: z.enum(providerTypes),
@@ -53,31 +61,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const parsed = providerSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid provider configuration", details: parsed.error.flatten() });
       const value = parsed.data;
-      if (!["openligadb", "thesportsdb_demo"].includes(value.providerType) && !value.apiKey) {
-        return res.status(400).json({ error: "This provider requires an API key" });
+      const normalizedFromFreeV1 =
+        value.providerType === "thesportsdb_live" &&
+        isTheSportsDbFreeCredential(value.apiKey);
+      const effectiveProviderType = normalizedFromFreeV1
+        ? "thesportsdb_demo"
+        : value.providerType;
+      const isPublicProvider = ["openligadb", "thesportsdb_demo"].includes(effectiveProviderType);
+
+      if (!isPublicProvider && !value.apiKey) {
+        return res.status(400).json({ error: "This premium provider requires an API key" });
       }
 
+      const settings = normalizedFromFreeV1
+        ? {
+            ...value.settings,
+            leagueId: String(value.settings.leagueId || "4328"),
+            sourceEndpoint: THE_SPORTS_DB_FREE_URL,
+          }
+        : value.settings;
+
       const { data, error } = await supabaseAdmin.from("sports_feed_providers").insert({
-        name: value.name,
-        provider_type: value.providerType,
-        encrypted_api_key: value.apiKey ? encryptProviderSecret(value.apiKey) : null,
-        settings: value.settings,
+        name: normalizedFromFreeV1 ? "TheSportsDB Free v1" : value.name,
+        provider_type: effectiveProviderType,
+        encrypted_api_key: isPublicProvider ? null : encryptProviderSecret(value.apiKey || ""),
+        settings,
         is_enabled: value.isEnabled,
-        is_demo: ["openligadb", "thesportsdb_demo"].includes(value.providerType),
+        is_demo: isPublicProvider,
         priority: value.priority,
-        sync_interval_seconds: value.syncIntervalSeconds,
+        sync_interval_seconds: effectiveProviderType === "thesportsdb_demo"
+          ? Math.max(value.syncIntervalSeconds, 60)
+          : value.syncIntervalSeconds,
         status: value.isEnabled ? "not_tested" : "disabled",
         created_by: adminAuth.userId,
       }).select().single();
 
       if (error) throw error;
 
-      return res.status(201).json({ provider: sanitizeProvider(data) });
+      return res.status(201).json({
+        provider: sanitizeProvider(data),
+        normalizedFromFreeV1,
+        message: normalizedFromFreeV1
+          ? "The supplied free v1 URL was added without storing it as a secret."
+          : "Sports provider saved.",
+      });
     } catch (error: any) {
       console.error("Failed to create provider:", error);
       return res.status(500).json({
-        error: "Failed to create provider",
-        details: error.message,
+        error: error instanceof Error ? error.message : "Failed to create provider",
       });
     }
   }
