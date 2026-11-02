@@ -127,6 +127,12 @@ export default function Sports() {
   }, []);
 
   useEffect(() => {
+    if (router.isReady && router.query.openBetslip === "1") {
+      setIsMobileBetSlipOpen(true);
+    }
+  }, [router.isReady, router.query.openBetslip]);
+
+  useEffect(() => {
     const eventId = typeof router.query.event === "string" ? router.query.event : null;
     if (!eventId || events.length === 0) return;
     const event = events.find((candidate) => candidate.id === eventId);
