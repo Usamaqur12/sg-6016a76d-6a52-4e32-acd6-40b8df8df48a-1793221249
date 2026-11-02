@@ -19,12 +19,28 @@ type ActiveSport = {
   leagues: Array<{ name: string; count: number }>;
 };
 
+const configuredSports = [
+  { id: "football", name: "Football", icon: "⚽" },
+  { id: "cricket", name: "Cricket", icon: "🏏" },
+  { id: "tennis", name: "Tennis", icon: "🎾" },
+  { id: "basketball", name: "Basketball", icon: "🏀" },
+  { id: "esports", name: "Esports", icon: "🎮" },
+  { id: "ice-hockey", name: "Ice Hockey", icon: "🏒" },
+  { id: "baseball", name: "Baseball", icon: "⚾" },
+  { id: "rugby", name: "Rugby", icon: "🏉" },
+] as const;
+
+function emptyConfiguredSports(): ActiveSport[] {
+  return configuredSports.map((sport) => ({ ...sport, count: 0, leagues: [] }));
+}
+
 const sportIcons: Record<string, string> = {
   football: "⚽",
   cricket: "🏏",
   tennis: "🎾",
   basketball: "🏀",
   esports: "🎮",
+  "ice-hockey": "🏒",
   hockey: "🏒",
   baseball: "⚾",
   rugby: "🏉",
@@ -33,7 +49,7 @@ const sportIcons: Record<string, string> = {
 export function SportsNav() {
   const router = useRouter();
   const [expandedSports, setExpandedSports] = useState<string[]>(["football"]);
-  const [sports, setSports] = useState<ActiveSport[]>([]);
+  const [sports, setSports] = useState<ActiveSport[]>(emptyConfiguredSports);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,32 +70,47 @@ export function SportsNav() {
           );
           if (!isBettable) continue;
 
-          const current = grouped.get(event.sportSlug) || {
+          const sportId = event.sportSlug === "hockey" ? "ice-hockey" : event.sportSlug;
+          const current = grouped.get(sportId) || {
             name: event.sport,
             count: 0,
             leagues: new Map<string, number>(),
           };
           current.count += 1;
           current.leagues.set(event.league, (current.leagues.get(event.league) || 0) + 1);
-          grouped.set(event.sportSlug, current);
+          grouped.set(sportId, current);
         }
 
-        const nextSports = [...grouped.entries()]
-          .map(([id, value]) => ({
+        const configuredIds = new Set(configuredSports.map((sport) => sport.id));
+        const toLeagues = (leagues: Map<string, number> | undefined) =>
+          [...(leagues?.entries() || [])]
+            .map(([name, count]) => ({ name, count }))
+            .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name));
+
+        const nextSports: ActiveSport[] = configuredSports.map((sport) => {
+          const live = grouped.get(sport.id);
+          return {
+            ...sport,
+            count: live?.count || 0,
+            leagues: toLeagues(live?.leagues),
+          };
+        });
+
+        for (const [id, value] of grouped.entries()) {
+          if (configuredIds.has(id as (typeof configuredSports)[number]["id"])) continue;
+          nextSports.push({
             id,
             name: value.name,
             icon: sportIcons[id] || "🏆",
             count: value.count,
-            leagues: [...value.leagues.entries()]
-              .map(([name, count]) => ({ name, count }))
-              .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
-          }))
-          .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name));
+            leagues: toLeagues(value.leagues),
+          });
+        }
 
         if (active) setSports(nextSports);
       } catch (error) {
         console.error("Failed to load active sportsbook navigation", error);
-        if (active) setSports([]);
+        if (active) setSports(emptyConfiguredSports());
       } finally {
         if (active) setLoading(false);
       }
@@ -133,14 +164,13 @@ export function SportsNav() {
         <div className="flex-1 overflow-y-auto">
           <div className="p-2">
             <p className="px-2.5 py-1.5 text-[10px] font-black text-subtle-foreground uppercase tracking-wider">
-              Active bettable sports
+              Sports
             </p>
             <div className="space-y-0.5">
-              {loading ? (
-                <p className="px-2.5 py-3 text-xs text-muted-foreground">Loading active markets…</p>
-              ) : sports.length === 0 ? (
-                <p className="px-2.5 py-3 text-xs text-muted-foreground">No active bettable events.</p>
-              ) : sports.map((sport) => {
+              {loading && (
+                <p className="px-2.5 py-2 text-[10px] text-muted-foreground">Refreshing active market counts…</p>
+              )}
+              {sports.map((sport) => {
                 const isExpanded = expandedSports.includes(sport.id);
                 const isActive = selectedSport === sport.id;
 
@@ -158,7 +188,9 @@ export function SportsNav() {
                         "w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-semibold transition-all duration-150",
                         isActive
                           ? "bg-primary/10 text-primary border border-primary/20"
-                          : "text-foreground hover:bg-surface-elevated hover:text-primary"
+                          : sport.count > 0
+                            ? "text-foreground hover:bg-surface-elevated hover:text-primary"
+                            : "text-muted-foreground hover:bg-surface-elevated hover:text-foreground"
                       )}
                     >
                       <div className="flex items-center gap-2">
