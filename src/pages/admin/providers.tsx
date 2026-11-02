@@ -63,7 +63,7 @@ export default function SportsProvidersPage() {
   const [oddsSportKey, setOddsSportKey] = useState("soccer_epl");
   const [oddsRegions, setOddsRegions] = useState("eu");
   const [oddsBookmakerKey, setOddsBookmakerKey] = useState("onexbet");
-  const [syncInterval, setSyncInterval] = useState("300");
+  const [syncInterval, setSyncInterval] = useState("3600");
   const [enabled, setEnabled] = useState(true);
 
   useEffect(() => { void loadProviders(); }, []);
