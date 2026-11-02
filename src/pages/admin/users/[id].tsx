@@ -231,27 +231,6 @@ export default function AdminUserDetailsPage() {
             <Card>
               <CardHeader><CardTitle>Account controls</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="font-semibold">KYC activation</div>
-                    <p className="text-xs text-muted-foreground">
-                      {details.profile.kyc_status === "approved"
-                        ? "KYC is approved; the customer is eligible for activation."
-                        : details.profile.kyc_activation_override
-                          ? "Admin override is active. This customer may use the account without approved KYC."
-                          : "Account transactions remain locked until KYC approval or an audited admin override."}
-                    </p>
-                  </div>
-                  {details.profile.kyc_status !== "approved" && details.profile.account_status !== "closed" && (
-                    <Button
-                      variant={details.profile.kyc_activation_override ? "outline" : "default"}
-                      disabled={saving}
-                      onClick={() => void updateControls(undefined, details.profile.kyc_activation_override ? "require_kyc" : "activate_without_kyc")}
-                    >
-                      {details.profile.kyc_activation_override ? "Remove KYC override" : "Activate without KYC"}
-                    </Button>
-                  )}
-                </div>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {([
                     ["is_suspended", "Login", details.profile.is_suspended],
