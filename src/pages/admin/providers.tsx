@@ -40,7 +40,7 @@ interface ProviderActionResult {
 
 const providerLabels: Record<ProviderType, string> = {
   openligadb: "OpenLigaDB Live Scores (no key)",
-  thesportsdb_demo: "TheSportsDB Demo Schedule (free)",
+  thesportsdb_demo: "TheSportsDB Free v1 Schedule (key 123)",
   thesportsdb_live: "TheSportsDB V2 Live Scores",
   sportmonks: "Sportmonks Football Live Scores",
 };
@@ -53,14 +53,14 @@ export default function SportsProvidersPage() {
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [result, setResult] = useState<ProviderActionResult | null>(null);
   const [showKey, setShowKey] = useState(false);
-  const [name, setName] = useState("TheSportsDB Live Scores");
-  const [providerType, setProviderType] = useState<ProviderType>("thesportsdb_live");
+  const [name, setName] = useState("TheSportsDB Free v1");
+  const [providerType, setProviderType] = useState<ProviderType>("thesportsdb_demo");
   const [apiKey, setApiKey] = useState("");
   const [leagueId, setLeagueId] = useState("4328");
   const [leagueShortcut, setLeagueShortcut] = useState("bl1");
   const [sport, setSport] = useState("soccer");
-  const [syncInterval, setSyncInterval] = useState("10");
-  const [enabled, setEnabled] = useState(false);
+  const [syncInterval, setSyncInterval] = useState("300");
+  const [enabled, setEnabled] = useState(true);
 
   useEffect(() => { void loadProviders(); }, []);
 
@@ -72,7 +72,7 @@ export default function SportsProvidersPage() {
       headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}`, ...(init?.headers || {}) },
     });
     const body = await response.json();
-    if (!response.ok) throw new Error(body.error || "Provider request failed");
+    if (!response.ok) throw new Error(body.details || body.error || "Provider request failed");
     return body;
   }
 
@@ -97,9 +97,12 @@ export default function SportsProvidersPage() {
         settings: { leagueId: leagueId.trim() || undefined, leagueShortcut: leagueShortcut.trim() || undefined, sport: sport.trim() || undefined },
         isEnabled: enabled, priority: providerType === "openligadb" ? 50 : 100, syncIntervalSeconds: providerType === "openligadb" ? Math.max(Number(syncInterval), 60) : Number(syncInterval),
       };
-      await adminFetch("/api/admin/sports-providers", { method: "POST", body: JSON.stringify(payload) });
+      const body = await adminFetch("/api/admin/sports-providers", { method: "POST", body: JSON.stringify(payload) });
       setApiKey("");
-      toast({ title: "Provider added", description: "Use Test first, then Sync now." });
+      toast({
+        title: "Provider added",
+        description: body.message || "Use Test first, then Sync now.",
+      });
       await loadProviders();
     } catch (error) {
       toast({ title: "Provider could not be added", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
@@ -176,7 +179,14 @@ export default function SportsProvidersPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2"><Label htmlFor="provider-name">Display name</Label><Input id="provider-name" value={name} onChange={(event) => setName(event.target.value)} /></div>
               <div className="space-y-2"><Label>Provider</Label><Select value={providerType} onValueChange={(value) => setProviderType(value as ProviderType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(providerLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
-              {!['thesportsdb_demo', 'openligadb'].includes(providerType) && <div className="space-y-2"><Label htmlFor="provider-key">API key/token</Label><div className="flex gap-2"><Input id="provider-key" type={showKey ? "text" : "password"} autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /><Button type="button" size="icon" variant="outline" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "Hide API key" : "Show API key"}>{showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button></div></div>}
+              {providerType === "thesportsdb_demo" && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">Supplied free API is ready</p>
+                  <p className="mt-1 break-all font-mono">https://www.thesportsdb.com/api/v1/json/123/searchteams.php?t=Arsenal</p>
+                  <p className="mt-2">No secret is required. This verifies the connection and imports available schedules/scores; premium V2 is required for true live scores.</p>
+                </div>
+              )}
+              {!['thesportsdb_demo', 'openligadb'].includes(providerType) && <div className="space-y-2"><Label htmlFor="provider-key">API key/token or TheSportsDB v1 cURL URL</Label><div className="flex gap-2"><Input id="provider-key" type={showKey ? "text" : "password"} autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /><Button type="button" size="icon" variant="outline" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "Hide API key" : "Show API key"}>{showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button></div></div>}
               <div className="grid grid-cols-2 gap-3">{providerType === "openligadb" ? <div className="space-y-2"><Label htmlFor="league-shortcut">League shortcut</Label><Input id="league-shortcut" value={leagueShortcut} onChange={(event) => setLeagueShortcut(event.target.value)} placeholder="bl1" /></div> : <div className="space-y-2"><Label htmlFor="league-id">League ID</Label><Input id="league-id" value={leagueId} onChange={(event) => setLeagueId(event.target.value)} placeholder="4328" /></div>}<div className="space-y-2"><Label htmlFor="sport-code">Sport</Label><Input id="sport-code" value={sport} onChange={(event) => setSport(event.target.value)} placeholder="soccer" /></div></div>
               <div className="space-y-2"><Label htmlFor="sync-interval">Sync interval (seconds)</Label><Input id="sync-interval" type="number" min="5" max="3600" value={syncInterval} onChange={(event) => setSyncInterval(event.target.value)} /></div>
               <div className="flex items-center justify-between rounded border border-border p-3"><div><div className="text-sm font-medium">Enable after saving</div><div className="text-xs text-muted-foreground">Test before using scheduled sync.</div></div><Switch checked={enabled} onCheckedChange={setEnabled} /></div>
