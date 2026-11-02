@@ -121,14 +121,25 @@ async function fetchSportsDb(config: SportsProviderConfig, apiKey: string | null
   if (config.provider_type === "thesportsdb_demo") {
     const leagueId = String(settings.leagueId || "4328").replace(/[^0-9]/g, "") || "4328";
     const today = new Date().toISOString().slice(0, 10);
-    const responses = await Promise.allSettled([
+    const [teamProbe, ...scheduleResponses] = await Promise.allSettled([
+      fetchJson("https://www.thesportsdb.com/api/v1/json/123/searchteams.php?t=Arsenal"),
       fetchJson(`https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${today}&l=${leagueId}`),
       fetchJson(`https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php?id=${leagueId}`),
     ]);
-    const rawEvents = responses.flatMap((response) => response.status === "fulfilled" ? arrayFromProviderBody(response.value) : []);
-    if (rawEvents.length === 0 && responses.every((response) => response.status === "rejected")) {
-      throw new Error("TheSportsDB development feed is unavailable");
+
+    if (teamProbe.status === "rejected") {
+      throw new Error("TheSportsDB free v1 connection check failed");
     }
+    const arsenal = Array.isArray((teamProbe.value as any)?.teams)
+      ? (teamProbe.value as any).teams.find((team: any) => String(team?.strTeam || "").toLowerCase() === "arsenal")
+      : null;
+    if (!arsenal?.idTeam) {
+      throw new Error("TheSportsDB free v1 returned an invalid Arsenal team response");
+    }
+
+    const rawEvents = scheduleResponses.flatMap((response) =>
+      response.status === "fulfilled" ? arrayFromProviderBody(response.value) : []
+    );
     const uniqueEvents = [...new Map(rawEvents.map((event: any) => [String(event?.idEvent || ""), event])).values()];
     return uniqueEvents.map((item) => normalizeSportsDbEvent(item, config.id)).filter(Boolean) as NormalizedSportsEvent[];
   }
