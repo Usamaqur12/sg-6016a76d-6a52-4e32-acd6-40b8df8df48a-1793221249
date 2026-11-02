@@ -1,6 +1,6 @@
--- Force-clean untouched legacy welcome-credit accounts that were skipped by earlier cleanup.
--- Targets only non-admin accounts whose only wallet history is the exact legacy welcome credit
--- and which have no bets. Both profile-opening and welcome-transaction ledger journals are reversed.
+-- Remove the automatic legacy welcome credit from every affected non-admin customer.
+-- Real deposits and unrelated transaction history are preserved. Only the exact profile-opening
+-- and welcome-transaction ledger journals created by the old signup trigger are reversed.
 
 CREATE TEMP TABLE force_legacy_credit_users ON COMMIT DROP AS
 SELECT DISTINCT p.id
@@ -9,16 +9,7 @@ JOIN public.wallet_transactions welcome
   ON welcome.user_id=p.id
  AND welcome.amount=10000.00
  AND welcome.description='Welcome bonus - Demo credits'
-WHERE COALESCE(p.is_admin,FALSE)=FALSE
-  AND NOT EXISTS (
-    SELECT 1
-    FROM public.wallet_transactions other_transaction
-    WHERE other_transaction.user_id=p.id
-      AND other_transaction.id<>welcome.id
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM public.bets bet WHERE bet.user_id=p.id
-  );
+WHERE COALESCE(p.is_admin,FALSE)=FALSE;
 
 DO $cleanup$
 BEGIN
@@ -78,21 +69,19 @@ BEGIN
           AND transaction_record.description='Welcome bonus - Demo credits'
       );
 
-    UPDATE public.ledger_accounts
-    SET balance=0.00,updated_at=NOW()
-    WHERE user_id IN (SELECT id FROM force_legacy_credit_users)
-      AND account_code IN ('cash','bonus','locked');
   END IF;
 
   IF to_regclass('public.wallet_accounts') IS NOT NULL THEN
     BEGIN
       EXECUTE 'UPDATE public.wallet_accounts
-        SET balance=0.00,bonus_balance=0.00,updated_at=NOW()
+        SET balance=GREATEST(0.00,balance-10000.00),
+            bonus_balance=GREATEST(0.00,bonus_balance),
+            updated_at=NOW()
         WHERE user_id IN (SELECT id FROM force_legacy_credit_users)';
     EXCEPTION WHEN undefined_column THEN
       BEGIN
         EXECUTE 'UPDATE public.wallet_accounts
-          SET balance=0.00,updated_at=NOW()
+          SET balance=GREATEST(0.00,balance-10000.00),updated_at=NOW()
           WHERE user_id IN (SELECT id FROM force_legacy_credit_users)';
       EXCEPTION WHEN undefined_column THEN NULL;
       END;
@@ -110,7 +99,8 @@ WHERE transaction_record.user_id=legacy.id
 DROP TRIGGER IF EXISTS protect_profile_system_fields_trigger ON public.profiles;
 
 UPDATE public.profiles profile
-SET demo_balance=0.00,updated_at=NOW()
+SET demo_balance=GREATEST(0.00,COALESCE(profile.demo_balance,0)-10000.00),
+    updated_at=NOW()
 FROM force_legacy_credit_users legacy
 WHERE profile.id=legacy.id;
 
