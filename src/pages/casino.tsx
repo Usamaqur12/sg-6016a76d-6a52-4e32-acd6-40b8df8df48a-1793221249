@@ -13,6 +13,15 @@ import { Play, Star, TrendingUp, Zap, Trophy, Dices, Flame } from "lucide-react"
 
 const casinoGames = [
   {
+    id: -100,
+    name: "MindBet Mines",
+    provider: "MindBet Originals",
+    category: "table",
+    image: "💎",
+    popular: true,
+    new: true,
+  },
+  {
     id: 1,
     name: "Mega Fortune",
     provider: "NetEnt",
@@ -184,7 +193,11 @@ export default function CasinoPage() {
 
   const handlePlayGame = async (gameId: string | number) => {
     if (!user) {
-      router.push("/auth/login");
+      router.push("/auth/login?returnTo=/casino/mines");
+      return;
+    }
+    if (gameId === -100) {
+      await router.push("/casino/mines");
       return;
     }
     if (!casinoEnabled || typeof gameId === "number") {
@@ -252,7 +265,7 @@ export default function CasinoPage() {
             <div>
               <h1 className="text-4xl font-bold mb-2">Casino Lobby</h1>
               <p className="text-lg text-muted-foreground mb-4">
-                {casinoEnabled ? "Licensed-provider catalogue connection is active" : "Casino games currently unavailable"}
+                {casinoEnabled ? "MindBet Originals and licensed-provider catalogue" : "MindBet Mines is available now"}
               </p>
               {!user && (
                 <Button size="lg" className="bg-gold hover:bg-gold/90 text-background" onClick={() => void router.push("/auth/login?returnTo=/casino")}>
