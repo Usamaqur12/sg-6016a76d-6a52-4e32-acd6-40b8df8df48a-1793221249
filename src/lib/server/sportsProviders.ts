@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const providerTypes = ["openligadb", "thesportsdb_demo", "thesportsdb_live", "sportmonks"] as const;
+export const providerTypes = ["openligadb", "the_odds_api", "thesportsdb_demo", "thesportsdb_live", "sportmonks"] as const;
 export type SportsProviderType = (typeof providerTypes)[number];
 
 export interface SportsProviderConfig {
@@ -26,7 +26,17 @@ export interface NormalizedSportsEvent {
   homeScore?: number | null;
   awayScore?: number | null;
   liveMinute?: number | null;
-  markets: [];
+  markets: Array<{
+    name: string;
+    type: string;
+    line?: number | null;
+    status?: "active" | "suspended";
+    outcomes: Array<{
+      selection: string;
+      value: number;
+      active?: boolean;
+    }>;
+  }>;
 }
 
 const sportsDbEventSchema = z.object({
@@ -152,6 +162,128 @@ async function fetchSportsDb(config: SportsProviderConfig, apiKey: string | null
   return arrayFromProviderBody(body).map((item) => normalizeSportsDbEvent(item, config.id)).filter(Boolean) as NormalizedSportsEvent[];
 }
 
+const oddsApiEventSchema = z.object({
+  id: z.string().min(1),
+  sport_key: z.string().min(1),
+  sport_title: z.string().min(1),
+  commence_time: z.string().min(1),
+  home_team: z.string().min(1),
+  away_team: z.string().min(1),
+  bookmakers: z.array(z.object({
+    key: z.string(),
+    title: z.string(),
+    last_update: z.string().nullish(),
+    markets: z.array(z.object({
+      key: z.string(),
+      last_update: z.string().nullish(),
+      outcomes: z.array(z.object({
+        name: z.string(),
+        price: z.number(),
+        point: z.number().nullish(),
+      }).passthrough()),
+    }).passthrough()),
+  }).passthrough()),
+}).passthrough();
+
+async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | null) {
+  if (!apiKey) throw new Error("The Odds API key is missing");
+
+  const settings = config.settings || {};
+  const sportKey = String(settings.sportKey || "soccer_epl").trim();
+  const regions = String(settings.regions || "eu").trim().toLowerCase();
+  const bookmakerKey = String(settings.bookmakerKey || "onexbet").trim().toLowerCase();
+
+  if (!/^[a-z0-9_]{3,80}$/i.test(sportKey)) throw new Error("Invalid The Odds API sport key");
+  if (!/^(us|us2|uk|eu|au|ca|fr|se|fi)(,(us|us2|uk|eu|au|ca|fr|se|fi))*$/.test(regions)) {
+    throw new Error("Invalid The Odds API region");
+  }
+
+  const url = new URL(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/`);
+  url.searchParams.set("regions", regions);
+  url.searchParams.set("markets", "h2h");
+  url.searchParams.set("oddsFormat", "decimal");
+  url.searchParams.set("dateFormat", "iso");
+  url.searchParams.set("apiKey", apiKey);
+
+  const body = await fetchJson(url.toString());
+  const rawEvents = Array.isArray(body) ? body : [];
+
+  return rawEvents.map((value): NormalizedSportsEvent | null => {
+    const parsed = oddsApiEventSchema.safeParse(value);
+    if (!parsed.success) return null;
+
+    const event = parsed.data;
+    const preferred = event.bookmakers.find((bookmaker) =>
+      bookmaker.key.toLowerCase() === bookmakerKey
+      && bookmaker.markets.some((market) => market.key === "h2h")
+    );
+    const bookmaker = preferred || event.bookmakers.find((candidate) =>
+      candidate.markets.some((market) => market.key === "h2h")
+    );
+    const h2h = bookmaker?.markets.find((market) => market.key === "h2h");
+    if (!bookmaker || !h2h) return null;
+
+    const normalizedOutcomes = h2h.outcomes.flatMap((outcome) => {
+      const selection = outcome.name === event.home_team
+        ? "Home"
+        : outcome.name === event.away_team
+          ? "Away"
+          : outcome.name.toLowerCase() === "draw"
+            ? "Draw"
+            : null;
+      const value = Number(outcome.price);
+      return selection && Number.isFinite(value) && value > 1
+        ? [{ selection, value, active: true }]
+        : [];
+    });
+
+    if (!normalizedOutcomes.some((outcome) => outcome.selection === "Home")
+      || !normalizedOutcomes.some((outcome) => outcome.selection === "Away")) {
+      return null;
+    }
+
+    const startTime = isoTimestamp(event.commence_time);
+    const kickoffMs = new Date(startTime).getTime();
+    const liveAgeMs = Date.now() - kickoffMs;
+    const status = liveAgeMs >= 0 && liveAgeMs <= 6 * 60 * 60 * 1000
+      ? "live" as const
+      : "upcoming" as const;
+    const isFootball = event.sport_key.startsWith("soccer");
+    const oddsFingerprint = normalizedOutcomes
+      .map((outcome) => `${outcome.selection}:${outcome.value}`)
+      .join("|");
+
+    return {
+      updateId: `${event.id}:${bookmaker.key}:${h2h.last_update || bookmaker.last_update || startTime}:${oddsFingerprint}`,
+      providerId: config.id,
+      providerEventId: event.id,
+      sport: {
+        name: isFootball ? "Football" : event.sport_title.split(" - ")[0] || event.sport_title,
+        slug: isFootball ? "football" : slugify(event.sport_title.split(" - ")[0] || event.sport_title),
+        icon: isFootball ? "⚽" : "🏆",
+      },
+      league: {
+        name: event.sport_title,
+        slug: slugify(event.sport_title),
+        country: regions.toUpperCase(),
+      },
+      homeTeam: event.home_team,
+      awayTeam: event.away_team,
+      startTime,
+      status,
+      homeScore: null,
+      awayScore: null,
+      liveMinute: null,
+      markets: [{
+        name: "Match Result",
+        type: "match_result",
+        status: "active",
+        outcomes: normalizedOutcomes,
+      }],
+    };
+  }).filter(Boolean) as NormalizedSportsEvent[];
+}
+
 function participantName(participants: any[], location: "home" | "away") {
   const participant = participants.find((item) => item?.meta?.location === location);
   return participant?.name || null;
@@ -267,6 +399,7 @@ async function fetchOpenLigaDb(config: SportsProviderConfig) {
 
 export async function fetchProviderEvents(config: SportsProviderConfig, apiKey: string | null) {
   if (config.provider_type === "openligadb") return fetchOpenLigaDb(config);
+  if (config.provider_type === "the_odds_api") return fetchTheOddsApi(config, apiKey);
   if (config.provider_type === "sportmonks") return fetchSportmonks(config, apiKey);
   return fetchSportsDb(config, apiKey);
 }
