@@ -61,7 +61,7 @@ function ingestionPayload(event: NormalizedSportsEvent) {
   };
 }
 
-async function importScoreOnlyEvent(event: NormalizedSportsEvent) {
+async function importProviderEventDirect(event: NormalizedSportsEvent) {
   const { data: sport, error: sportError } = await supabaseAdmin
     .from("sports")
     .upsert({
@@ -112,31 +112,107 @@ async function importScoreOnlyEvent(event: NormalizedSportsEvent) {
     provider_event_id: event.providerEventId,
     is_suspended: ["finished", "cancelled", "postponed"].includes(event.status),
     metadata: {
-      source: "score-feed",
+      source: event.markets.length > 0 ? "odds-feed" : "score-feed",
       providerId: event.providerId,
       providerEventId: event.providerEventId,
-      scoreOnly: true,
+      scoreOnly: event.markets.length === 0,
     },
     updated_at: new Date().toISOString(),
   };
 
+  let eventId: string;
   if (existing?.id) {
     const { error } = await supabaseAdmin
       .from("events")
       .update(eventRecord)
       .eq("id", existing.id);
     if (error) throw error;
-    return existing.id;
+    eventId = existing.id;
+  } else {
+    const { data: inserted, error } = await supabaseAdmin
+      .from("events")
+      .insert(eventRecord)
+      .select("id")
+      .single();
+
+    if (error) throw error;
+    eventId = inserted.id;
   }
 
-  const { data: inserted, error } = await supabaseAdmin
-    .from("events")
-    .insert(eventRecord)
-    .select("id")
-    .single();
+  for (const market of event.markets) {
+    let marketQuery = supabaseAdmin
+      .from("markets")
+      .select("id")
+      .eq("event_id", eventId)
+      .eq("type", market.type);
 
-  if (error) throw error;
-  return inserted.id;
+    marketQuery = market.line == null
+      ? marketQuery.is("line", null)
+      : marketQuery.eq("line", market.line);
+
+    const { data: existingMarket, error: marketLookupError } = await marketQuery.maybeSingle();
+    if (marketLookupError) throw marketLookupError;
+
+    const marketRecord = {
+      event_id: eventId,
+      name: market.name,
+      type: market.type,
+      line: market.line ?? null,
+      status: market.status || "active",
+    };
+
+    let marketId: string;
+    if (existingMarket?.id) {
+      const { error } = await supabaseAdmin
+        .from("markets")
+        .update(marketRecord)
+        .eq("id", existingMarket.id);
+      if (error) throw error;
+      marketId = existingMarket.id;
+    } else {
+      const { data: insertedMarket, error } = await supabaseAdmin
+        .from("markets")
+        .insert(marketRecord)
+        .select("id")
+        .single();
+      if (error) throw error;
+      marketId = insertedMarket.id;
+    }
+
+    for (const outcome of market.outcomes) {
+      const { data: existingOdd, error: oddLookupError } = await supabaseAdmin
+        .from("odds")
+        .select("id")
+        .eq("market_id", marketId)
+        .eq("selection", outcome.selection)
+        .maybeSingle();
+
+      if (oddLookupError) throw oddLookupError;
+
+      const oddRecord = {
+        market_id: marketId,
+        selection: outcome.selection,
+        value: outcome.value,
+        is_active: outcome.active ?? true,
+        is_locked: event.status !== "upcoming" && event.status !== "live",
+        last_provider_update: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existingOdd?.id) {
+        const { error } = await supabaseAdmin
+          .from("odds")
+          .update(oddRecord)
+          .eq("id", existingOdd.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabaseAdmin.from("odds").insert(oddRecord);
+        if (error) throw error;
+      }
+    }
+  }
+
+  return eventId;
 }
 
 export async function syncSportsProvider(provider: ManagedSportsProvider, mode: "test" | "sync") {
@@ -153,8 +229,8 @@ export async function syncSportsProvider(provider: ManagedSportsProvider, mode: 
         // their fixtures directly so display does not depend on optional feed
         // ingestion migrations. Odds-capable providers still use the atomic
         // ingestion RPC for market and price reconciliation.
-        if (event.markets.length === 0) {
-          await importScoreOnlyEvent(event);
+        if (event.markets.length === 0 || provider.provider_type === "the_odds_api") {
+          await importProviderEventDirect(event);
         } else {
           const { error } = await supabaseAdmin.rpc("ingest_sports_feed_event", {
             p_update_id: event.updateId,
