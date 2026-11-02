@@ -23,6 +23,7 @@ import {
   Trophy,
 } from "lucide-react";
 import Link from "next/link";
+import { getMyWalletBalances } from "@/services/walletService";
 
 interface Profile {
   id: string;
@@ -60,9 +61,7 @@ export default function AccountPage() {
         .eq("id", user.id)
         .single();
 
-      const { data: wallet, error: walletError } = await supabase.rpc("get_user_wallet_balance" as any, {
-        p_user_id: user.id
-      }) as { data: { cash_balance: number; bonus_balance: number } | null; error: any };
+      const walletResult = await getMyWalletBalances();
 
       const { data: bets } = await supabase
         .from("bets")
@@ -73,9 +72,7 @@ export default function AccountPage() {
       const totalWins = bets?.filter(b => b.status === "won").length || 0;
       const totalLosses = bets?.filter(b => b.status === "lost").length || 0;
 
-      const balance = !walletError && wallet 
-        ? Number(wallet.cash_balance || 0) + Number(wallet.bonus_balance || 0)
-        : 0;
+      const balance = walletResult.balances?.available || 0;
 
       setProfile({
         ...profileData,
