@@ -15,6 +15,7 @@ import { SearchModal } from "./SearchModal";
 import { getNotifications, markAllNotificationsRead, markNotificationRead, type UserNotification } from "@/services/notificationsService";
 import { useI18n } from "@/lib/i18n";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { getMyWalletBalances } from "@/services/walletService";
 
 interface HeaderProps {
   user: { email: string; balance: number } | null;
@@ -26,12 +27,21 @@ export function Header({ user, onAuthClick }: HeaderProps) {
   const { t } = useI18n();
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
+  const [displayBalance, setDisplayBalance] = useState(user?.balance || 0);
   const userEmail = user?.email;
 
   useEffect(() => {
     if (!user) { setNotifications([]); return; }
     void getNotifications().then((result) => setNotifications(result.notifications));
   }, [userEmail]);
+
+  useEffect(() => {
+    setDisplayBalance(user?.balance || 0);
+    if (!user) return;
+    void getMyWalletBalances().then((result) => {
+      if (result.balances) setDisplayBalance(result.balances.available);
+    });
+  }, [userEmail, user?.balance]);
 
   const unreadCount = notifications.filter((notification) => !notification.is_read).length;
 
@@ -117,7 +127,7 @@ export function Header({ user, onAuthClick }: HeaderProps) {
                 {/* Balance - Green text */}
                 <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-surface-elevated border border-primary/20 h-8">
                   <Wallet className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-xs font-mono font-bold text-primary">${user.balance.toFixed(2)}</span>
+                  <span className="text-xs font-mono font-bold text-primary">${displayBalance.toFixed(2)}</span>
                 </div>
 
                 <Button
