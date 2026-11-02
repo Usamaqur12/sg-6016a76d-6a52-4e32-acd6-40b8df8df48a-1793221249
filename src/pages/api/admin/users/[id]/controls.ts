@@ -1,26 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
 import { requireAdminApi } from "@/lib/server/requireAdminApi";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
-
-function createAdminRequestClient(req: NextApiRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const publicKey = (
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  )?.trim();
-  const authorization = req.headers.authorization;
-
-  if (!url || !publicKey || !authorization?.startsWith("Bearer ")) {
-    throw new Error("Authenticated Supabase admin session is not configured");
-  }
-
-  return createClient(url, publicKey, {
-    global: { headers: { Authorization: authorization } },
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -114,10 +95,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // Run protected profile changes as the authenticated admin. This keeps
-    // database role/trigger checks effective with opaque Supabase secret keys.
-    const adminClient = createAdminRequestClient(req);
-    const { data: updated, error: updateError } = await (adminClient as any)
+    // Authorization was already verified from the caller token above. Perform
+    // the protected mutation with the server-only service client so both
+    // super-admin and operational admin updates are not blocked by browser RLS.
+    const { data: updated, error: updateError } = await (supabaseAdmin as any)
       .from("profiles")
       .update(updates)
       .eq("id", userId)
