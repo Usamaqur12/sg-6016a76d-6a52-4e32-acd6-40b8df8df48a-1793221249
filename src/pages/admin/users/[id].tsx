@@ -114,11 +114,11 @@ export default function AdminUserDetailsPage() {
     }
   }
 
-  async function updateControls(controls?: Record<string, boolean>, action?: "archive" | "restore" | "activate_without_kyc" | "require_kyc") {
+  async function updateControls(controls?: Record<string, boolean>, action?: "archive" | "restore") {
     if (!details) return;
     let auditReason = controlReason.trim();
     if (auditReason.length < 5) {
-      const requestedReason = window.prompt("Enter an audit reason for this account change (minimum 5 characters):", action === "activate_without_kyc" ? "Manual activation approved by administrator" : "");
+      const requestedReason = window.prompt("Enter an audit reason for this account change (minimum 5 characters):", "");
       auditReason = requestedReason?.trim() || "";
       if (auditReason.length < 5) {
         toast({ title: "Reason required", description: "Enter an audit reason of at least 5 characters.", variant: "destructive" });
@@ -127,14 +127,13 @@ export default function AdminUserDetailsPage() {
       setControlReason(auditReason);
     }
     if (action === "archive" && !window.confirm("Archive this user? The account will disappear from active users and login, wallet, betting, deposits and withdrawals will be disabled.")) return;
-    if (action === "activate_without_kyc" && !window.confirm("Activate this customer without approved KYC? This audited override unlocks transactional account access.")) return;
     setSaving(true);
     try {
       await adminFetch("/api/admin/users/" + details.profile.id + "/controls", {
         method: "PATCH",
         body: JSON.stringify(action ? { action, reason: auditReason } : { controls, reason: auditReason }),
       });
-      toast({ title: action === "archive" ? "User deleted safely" : action === "restore" ? "User restored" : action === "activate_without_kyc" ? "KYC override activated" : action === "require_kyc" ? "KYC requirement restored" : "Account control updated" });
+      toast({ title: action === "archive" ? "User deleted safely" : action === "restore" ? "User restored" : "Account control updated" });
       if (action === "archive") {
         await router.push("/admin/users");
         return;
@@ -215,8 +214,8 @@ export default function AdminUserDetailsPage() {
                 <p className="text-muted-foreground">{details.profile.email}</p>
               </div>
               <div className="flex gap-2">
-                <Badge variant={details.profile.is_suspended || details.profile.account_status === "pending_kyc" ? "destructive" : "outline"}>
-                  {details.profile.is_suspended ? "Suspended" : details.profile.account_status === "pending_kyc" ? "Pending KYC" : "Active"}
+                <Badge variant={details.profile.is_suspended || details.profile.account_status === "closed" ? "destructive" : "outline"}>
+                  {details.profile.is_suspended ? "Suspended" : details.profile.account_status === "closed" ? "Closed" : "Active"}
                 </Badge>
                 <Badge variant="secondary">{details.profile.kyc_status || "not_submitted"}</Badge>
               </div>
