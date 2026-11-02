@@ -69,8 +69,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       admin_role: null,
       is_suspended: false,
       demo_balance: 0,
-      account_status: "pending_kyc",
-      kyc_activation_override: false,
+      account_status: "active",
+      kyc_activation_override: true,
     }, { onConflict: "id" });
 
     if (profileError) {
