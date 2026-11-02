@@ -416,8 +416,6 @@ export default function AdminUsers() {
                             <Ban className="h-3 w-3 mr-1" />
                             Suspended
                           </Badge>
-                        ) : user.account_status === "closed" ? (
-                          <Badge variant="outline" className="ml-2 border-destructive text-destructive">Closed</Badge>
                         ) : null}
                       </div>
                       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
