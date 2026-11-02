@@ -15,6 +15,7 @@ const ADMIN_API_ACCESS: Array<{ prefix: string; requirement: ApiRequirement }> =
   { prefix: "/api/admin/readiness", requirement: "super_admin" },
   { prefix: "/api/admin/dashboard", requirement: "dashboard" },
   { prefix: "/api/admin/users", requirement: "users" },
+  { prefix: "/api/admin/kyc", requirement: "kyc" },
   { prefix: "/api/admin/announcements", requirement: "announcements" },
   { prefix: "/api/admin/promotions", requirement: "promotions" },
   { prefix: "/api/admin/support", requirement: "support" },
