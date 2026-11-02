@@ -26,7 +26,11 @@ export function MobileBottomNav() {
   ];
 
   const openBetSlip = () => {
-    window.dispatchEvent(new CustomEvent("open-mobile-betslip"));
+    if (router.pathname === "/sports") {
+      window.dispatchEvent(new CustomEvent("open-mobile-betslip"));
+      return;
+    }
+    void router.push({ pathname: "/sports", query: { openBetslip: "1" } });
   };
 
   return (
