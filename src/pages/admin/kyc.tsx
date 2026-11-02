@@ -80,18 +80,32 @@ export default function AdminKYC() {
     setProcessing(true);
 
     try {
-      const { error: updateError } = await (supabase as any).rpc("review_kyc_document_manual", {
-        p_document_id: selectedDoc.id,
-        p_action: reviewAction,
-        p_note: rejectionReason || null,
-        p_risk_level: riskLevel,
-        p_source_of_funds_status: sourceOfFunds,
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Admin session expired. Sign in again.");
+
+      const response = await fetch("/api/admin/kyc/review", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          documentId: selectedDoc.id,
+          action: reviewAction,
+          note: rejectionReason.trim() || null,
+          riskLevel,
+          sourceOfFundsStatus: sourceOfFunds,
+        }),
       });
-      if (updateError) throw updateError;
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "KYC review failed");
 
       toast({
-        title: "Document Reviewed",
-        description: `Manual review action “${reviewAction.replaceAll("_", " ")}” was recorded.`,
+        title: result.kycStatus === "approved" ? "Withdrawal KYC approved" : "Document reviewed",
+        description:
+          result.kycStatus === "approved"
+            ? "Identity and address checks are approved. Withdrawals are now enabled."
+            : `Document marked ${result.documentStatus}. Identity and proof of address are both required for withdrawal approval.`,
       });
 
       setSelectedDoc(null);
@@ -101,8 +115,8 @@ export default function AdminKYC() {
     } catch (error) {
       console.error("Error reviewing document:", error);
       toast({
-        title: "Error",
-        description: "Failed to review document",
+        title: "KYC approval failed",
+        description: error instanceof Error ? error.message : "Failed to review document",
         variant: "destructive",
       });
     } finally {
@@ -158,7 +172,7 @@ export default function AdminKYC() {
         <div>
           <h1 className="text-3xl font-bold mb-2">KYC Document Review</h1>
           <p className="text-muted-foreground">
-            Review and approve customer verification documents
+            Review customer documents required for withdrawals
           </p>
         </div>
 
