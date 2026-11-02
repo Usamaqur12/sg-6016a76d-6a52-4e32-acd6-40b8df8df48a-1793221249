@@ -169,10 +169,10 @@ BEGIN
   WHILE cardinality(v_mines)<p_mine_count LOOP
     v_hash:=digest(v_seed||':'||trim(p_client_seed)||':'||v_counter::TEXT,'sha256');
     v_candidate:=(
-      get_byte(v_hash,0)*16777216+
-      get_byte(v_hash,1)*65536+
-      get_byte(v_hash,2)*256+
-      get_byte(v_hash,3)
+      get_byte(v_hash,0)::BIGINT*16777216+
+      get_byte(v_hash,1)::BIGINT*65536+
+      get_byte(v_hash,2)::BIGINT*256+
+      get_byte(v_hash,3)::BIGINT
     )%25;
     IF NOT (v_candidate=ANY(v_mines)) THEN v_mines:=array_append(v_mines,v_candidate); END IF;
     v_counter:=v_counter+1;
