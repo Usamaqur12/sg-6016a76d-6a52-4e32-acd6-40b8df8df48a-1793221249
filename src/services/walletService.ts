@@ -17,6 +17,27 @@ function isLegacyWelcomeTransaction(transaction: any): boolean {
     );
 }
 
+async function getProfileCompatibilityBalance(
+    userId: string
+): Promise<WalletBalances | null> {
+    const { data, error } = await supabase
+        .from("profiles")
+        .select("demo_balance")
+        .eq("id", userId)
+        .maybeSingle();
+
+    if (error || !data) return null;
+
+    const cash = Math.max(0, Number(data.demo_balance || 0));
+    return {
+        currency: "USD",
+        cash,
+        bonus: 0,
+        locked: 0,
+        available: cash,
+    };
+}
+
 export async function getMyWalletBalances(): Promise<{
     balances: WalletBalances | null;
     error?: string;
@@ -97,33 +118,45 @@ export async function getMyWalletBalances(): Promise<{
                 "get_my_wallet_balances"
             );
 
-            if (error) throw error;
-
             if (
-                !data ||
-                typeof data !== "object" ||
-                Array.isArray(data)
+                !error &&
+                data &&
+                typeof data === "object" &&
+                !Array.isArray(data)
             ) {
-                return { balances: null };
+                const value = data as Record<string, unknown>;
+                const cash = Math.max(0, Number(value.cash || 0));
+                const bonus = Math.max(0, Number(value.bonus || 0));
+                const locked = Math.max(0, Number(value.locked || 0));
+
+                if (cash + bonus + locked > 0) {
+                    return {
+                        balances: {
+                            currency:
+                                typeof value.currency === "string"
+                                    ? value.currency
+                                    : "USD",
+                            cash,
+                            bonus,
+                            locked,
+                            available: cash + bonus,
+                        },
+                    };
+                }
             }
 
-            const value = data as Record<string, unknown>;
-            const cash = Math.max(0, Number(value.cash || 0));
-            const bonus = Math.max(0, Number(value.bonus || 0));
-            const locked = Math.max(0, Number(value.locked || 0));
+            // The current betting RPCs still debit the protected profile
+            // balance mirror. Use that same signed-in-user value if the ledger
+            // endpoint/RPC is unavailable or an older account has not been
+            // reconciled into ledger buckets yet.
+            const profileBalance =
+                await getProfileCompatibilityBalance(userId);
+            if (profileBalance) {
+                return { balances: profileBalance };
+            }
 
-            return {
-                balances: {
-                    currency:
-                        typeof value.currency === "string"
-                            ? value.currency
-                            : "USD",
-                    cash,
-                    bonus,
-                    locked,
-                    available: cash + bonus,
-                },
-            };
+            if (error) throw error;
+            return { balances: null };
         }
 
         const rows = accountRows as Array<{
@@ -145,6 +178,14 @@ export async function getMyWalletBalances(): Promise<{
         const cash = balanceFor("cash");
         const bonus = balanceFor("bonus");
         const locked = balanceFor("locked");
+
+        if (cash + bonus + locked === 0) {
+            const profileBalance =
+                await getProfileCompatibilityBalance(userId);
+            if (profileBalance && profileBalance.available > 0) {
+                return { balances: profileBalance };
+            }
+        }
 
         return {
             balances: {
