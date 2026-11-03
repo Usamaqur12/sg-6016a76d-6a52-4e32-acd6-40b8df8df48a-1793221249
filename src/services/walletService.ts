@@ -9,22 +9,10 @@ export interface WalletBalances {
 }
 
 const LEGACY_WELCOME_DESCRIPTION = "Welcome bonus - Demo credits";
-const LEGACY_LEDGER_CREDIT = 20000;
+
 
 function isLegacyWelcomeTransaction(transaction: any): boolean {
   return transaction?.description === LEGACY_WELCOME_DESCRIPTION && Number(transaction?.amount) === 10000;
-}
-
-async function userHasLegacyWelcomeCredit(userId: string): Promise<boolean> {
-  const { data } = await (supabase as any)
-    .from("wallet_transactions")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("description", LEGACY_WELCOME_DESCRIPTION)
-    .eq("amount", 10000)
-    .limit(1)
-    .maybeSingle();
-  return Boolean(data?.id);
 }
 
 export async function getMyWalletBalances(): Promise<{ balances: WalletBalances | null; error?: string }> {
@@ -33,9 +21,11 @@ export async function getMyWalletBalances(): Promise<{ balances: WalletBalances 
     if (error) throw error;
     if (!data || typeof data !== "object" || Array.isArray(data)) return { balances: null };
     const value = data as Record<string, unknown>;
-    const { data: { user } } = await supabase.auth.getUser();
-    const legacyOffset = user && await userHasLegacyWelcomeCredit(user.id) ? LEGACY_LEDGER_CREDIT : 0;
-    const cash = Math.max(0, Number(value.cash || 0) - legacyOffset);
+    // The ledger is authoritative. Legacy demo credits are removed by the
+    // database cleanup migrations; subtracting a client-side offset here also
+    // hides legitimate admin deposits on accounts that retain an old history
+    // marker.
+    const cash = Math.max(0, Number(value.cash || 0));
     const bonus = Math.max(0, Number(value.bonus || 0));
     const locked = Math.max(0, Number(value.locked || 0));
     return { balances: {
