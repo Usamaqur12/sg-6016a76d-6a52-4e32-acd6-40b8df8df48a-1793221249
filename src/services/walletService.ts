@@ -42,7 +42,7 @@ export async function getMyWalletBalances(): Promise<{
             .eq("user_id", user.id)
             .eq("currency", "USD");
 
-        if (accountError) {
+        if (accountError || !accountRows || accountRows.length === 0) {
             const { data, error } = await supabase.rpc(
                 "get_my_wallet_balances"
             );
