@@ -21,6 +21,7 @@ import { useBetSlip } from "@/hooks/useBetSlip";
 import { placeBet, type OddsAcceptance } from "@/services/bettingService";
 import { fetchUpcomingEvents } from "@/services/sportsbookService";
 import { getUserFavoriteEventIds, toggleFavorite } from "@/services/favoritesService";
+import { getMyWalletBalances } from "@/services/walletService";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,16 +45,15 @@ export default function Sports() {
   const [view, setView] = useState<SportsbookView>("all");
   const [sort, setSort] = useState<SportsbookSort>("soonest");
 
-  const loadProfile = useCallback(async (userId: string) => {
-    const { data, error } = await db.rpc("get_user_wallet_balance" as any, {
-      p_user_id: userId
-    }) as { data: { cash_balance: number; bonus_balance: number } | null; error: any };
-    
-    if (!error && data) {
-      setProfile({ balance: Number(data.cash_balance || 0) + Number(data.bonus_balance || 0) });
-    } else {
-      setProfile({ balance: 0 });
-    }
+  const loadProfile = useCallback(async (_userId: string) => {
+    const result = await getMyWalletBalances();
+    setProfile({
+      balance: Number(
+        result.balances?.available ??
+        result.balances?.cash ??
+        0
+      ),
+    });
   }, []);
 
   const loadEvents = useCallback(async (showLoader = true) => {
@@ -356,17 +356,20 @@ export default function Sports() {
         </div>
       </div>
 
-      {betSlip.bets.length > 0 && (
-        <Button
-          onClick={() => setIsMobileBetSlipOpen(true)}
-          className="fixed right-4 bottom-20 z-30 lg:hidden h-12 rounded-full px-4 shadow-xl"
-          aria-label={`Open bet slip with ${betSlip.bets.length} selections`}
-        >
-          <Receipt className="h-4 w-4 mr-2" />
-          Bet Slip
-          <Badge className="ml-2 bg-background text-foreground">{betSlip.bets.length}</Badge>
-        </Button>
-      )}
+      <Button
+        onClick={() => setIsMobileBetSlipOpen(true)}
+        className="fixed right-3 bottom-20 z-30 h-12 max-w-[calc(100vw-1.5rem)] rounded-full px-4 shadow-xl lg:hidden"
+        aria-label={`Open bet slip with ${betSlip.bets.length} selections`}
+      >
+        <Receipt className="mr-2 h-4 w-4" />
+        Bet Slip
+        <Badge className="ml-2 bg-background text-foreground">{betSlip.bets.length}</Badge>
+        {profile && (
+          <span className="ml-2 border-l border-background/25 pl-2 font-mono text-xs">
+            ${profile.balance.toFixed(2)}
+          </span>
+        )}
+      </Button>
 
       <MobileBetSlipDrawer
         selections={betSlip.bets.map((bet) => ({
