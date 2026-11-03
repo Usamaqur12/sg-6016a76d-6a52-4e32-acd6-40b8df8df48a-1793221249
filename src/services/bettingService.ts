@@ -74,8 +74,14 @@ export async function placeBet(
     }
 
     const walletResult = await getMyWalletBalances();
-    const availableBalance = walletResult.balances?.available || 0;
-    if (stake > availableBalance) {
+    // This browser-side check is only an early UX guard. If the balance read is
+    // unavailable, let the atomic database RPC decide; it locks the wallet and
+    // rejects insufficient funds securely. Treating a failed read as $0 blocked
+    // fully funded customers before the RPC was ever called.
+    if (
+      walletResult.balances &&
+      stake > walletResult.balances.available
+    ) {
       return { success: false, error: "Insufficient funded balance", result: "rejected" as const };
     }
 
