@@ -23,23 +23,73 @@ export async function getMyWalletBalances(): Promise<{
 }> {
     try {
         const {
-            data: { user },
-            error: userError,
-        } = await supabase.auth.getUser();
+            data: { session },
+            error: sessionError,
+        } = await supabase.auth.getSession();
 
-        if (userError) throw userError;
+        if (sessionError) throw sessionError;
 
-        if (!user) {
+        if (!session?.access_token) {
             return {
                 balances: null,
                 error: "Authentication required",
             };
         }
 
+        // Use the authenticated server endpoint first. The server validates the
+        // access token and reads the authoritative ledger with server
+        // credentials, so customer balances do not depend on browser RLS state.
+        try {
+            const response = await fetch("/api/account/wallet", {
+                method: "GET",
+                headers: {
+                    authorization: `Bearer ${session.access_token}`,
+                },
+                cache: "no-store",
+            });
+
+            if (response.ok) {
+                const payload = (await response.json()) as {
+                    balances?: Partial<WalletBalances>;
+                };
+                const value = payload.balances;
+
+                if (value && typeof value === "object") {
+                    const cash = Math.max(0, Number(value.cash || 0));
+                    const bonus = Math.max(0, Number(value.bonus || 0));
+                    const locked = Math.max(0, Number(value.locked || 0));
+
+                    return {
+                        balances: {
+                            currency:
+                                typeof value.currency === "string"
+                                    ? value.currency
+                                    : "USD",
+                            cash,
+                            bonus,
+                            locked,
+                            available: cash + bonus,
+                        },
+                    };
+                }
+            } else {
+                console.warn(
+                    "Server wallet endpoint returned",
+                    response.status
+                );
+            }
+        } catch (serverError) {
+            console.warn(
+                "Server wallet endpoint unavailable; using Supabase fallback",
+                serverError
+            );
+        }
+
+        const userId = session.user.id;
         const { data: accountRows, error: accountError } = await (supabase as any)
             .from("ledger_accounts")
             .select("account_code,balance,currency")
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
             .eq("currency", "USD");
 
         if (accountError || !accountRows || accountRows.length === 0) {
@@ -58,21 +108,9 @@ export async function getMyWalletBalances(): Promise<{
             }
 
             const value = data as Record<string, unknown>;
-
-            const cash = Math.max(
-                0,
-                Number(value.cash || 0)
-            );
-
-            const bonus = Math.max(
-                0,
-                Number(value.bonus || 0)
-            );
-
-            const locked = Math.max(
-                0,
-                Number(value.locked || 0)
-            );
+            const cash = Math.max(0, Number(value.cash || 0));
+            const bonus = Math.max(0, Number(value.bonus || 0));
+            const locked = Math.max(0, Number(value.locked || 0));
 
             return {
                 balances: {
@@ -88,7 +126,7 @@ export async function getMyWalletBalances(): Promise<{
             };
         }
 
-        const rows = (accountRows || []) as Array<{
+        const rows = accountRows as Array<{
             account_code: string;
             balance: number | string;
             currency: string;
