@@ -9,9 +9,93 @@ const createUserSchema = z.object({
   fullName: z.string().trim().min(2).max(120).optional(),
 });
 
+function money(value: unknown) {
+  const amount = Number(value || 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+async function listUsers(res: NextApiResponse) {
+  const [profilesResult, ledgerResult, betsResult, depositsResult] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select("id,email,full_name,kyc_status,is_suspended,account_status,created_at,demo_balance")
+      .eq("is_admin", false)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("ledger_accounts")
+      .select("user_id,account_code,balance,currency")
+      .not("user_id", "is", null)
+      .eq("currency", "USD"),
+    supabaseAdmin.from("bets").select("user_id"),
+    supabaseAdmin
+      .from("wallet_transactions")
+      .select("user_id,amount")
+      .eq("type", "deposit")
+      .eq("status", "completed"),
+  ]);
+
+  if (profilesResult.error) throw profilesResult.error;
+  if (ledgerResult.error) throw ledgerResult.error;
+  if (betsResult.error) throw betsResult.error;
+  if (depositsResult.error) throw depositsResult.error;
+
+  const walletMap = new Map<string, { cash: number; bonus: number; locked: number }>();
+  for (const row of ledgerResult.data || []) {
+    if (!row.user_id) continue;
+    const balance = walletMap.get(row.user_id) || { cash: 0, bonus: 0, locked: 0 };
+    if (row.account_code === "cash") balance.cash = money(row.balance);
+    if (row.account_code === "bonus") balance.bonus = money(row.balance);
+    if (row.account_code === "locked") balance.locked = money(row.balance);
+    walletMap.set(row.user_id, balance);
+  }
+
+  const betCountMap = new Map<string, number>();
+  for (const bet of betsResult.data || []) {
+    betCountMap.set(bet.user_id, (betCountMap.get(bet.user_id) || 0) + 1);
+  }
+
+  const depositMap = new Map<string, number>();
+  for (const deposit of depositsResult.data || []) {
+    depositMap.set(
+      deposit.user_id,
+      (depositMap.get(deposit.user_id) || 0) + money(deposit.amount)
+    );
+  }
+
+  const users = (profilesResult.data || []).map((profile) => {
+    const ledger = walletMap.get(profile.id) || { cash: 0, bonus: 0, locked: 0 };
+    const ledgerAvailable = ledger.cash + ledger.bonus;
+    const walletBalance =
+      ledgerAvailable !== 0 ? ledgerAvailable : Math.max(0, money(profile.demo_balance));
+
+    return {
+      id: profile.id,
+      email: profile.email,
+      full_name: profile.full_name,
+      kyc_status: profile.kyc_status || "not_submitted",
+      is_suspended: Boolean(profile.is_suspended),
+      account_status: profile.account_status === "closed" ? "closed" : "active",
+      created_at: profile.created_at,
+      wallet_balance: walletBalance,
+      wallet: {
+        currency: "USD",
+        cash: ledgerAvailable !== 0 ? ledger.cash : walletBalance,
+        bonus: ledger.bonus,
+        locked: ledger.locked,
+        available: walletBalance,
+      },
+      total_bets: betCountMap.get(profile.id) || 0,
+      total_deposits: depositMap.get(profile.id) || 0,
+    };
+  });
+
+  res.setHeader("Cache-Control", "private, no-store, max-age=0");
+  return res.status(200).json({ users });
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
+  if (!["GET", "POST"].includes(req.method || "")) {
+    res.setHeader("Allow", "GET, POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
 
@@ -19,6 +103,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!auth) return;
   if (!["super_admin", "admin"].includes(auth.adminRole)) {
     return res.status(403).json({ error: "User management authorization required" });
+  }
+
+  if (req.method === "GET") {
+    try {
+      return await listUsers(res);
+    } catch (error) {
+      console.error("User list failed", error);
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : "Unable to load users",
+      });
+    }
   }
 
   const parsed = createUserSchema.safeParse(req.body);
