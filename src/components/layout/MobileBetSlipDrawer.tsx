@@ -119,7 +119,7 @@ export function MobileBetSlipDrawer({
       />
 
       {/* Drawer */}
-      <div className="fixed inset-x-0 bottom-0 z-50 w-screen max-w-full overflow-x-hidden bg-surface border-t border-border shadow-2xl lg:hidden animate-in slide-in-from-bottom duration-300">
+      <div className="fixed inset-x-0 bottom-0 z-50 max-h-[calc(100dvh-4rem)] w-screen max-w-full overflow-x-hidden bg-surface border-t border-border shadow-2xl lg:hidden animate-in slide-in-from-bottom duration-300">
         {/* Handle */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -158,7 +158,7 @@ export function MobileBetSlipDrawer({
 
         {/* Content */}
         {isExpanded && (
-          <div className="max-h-[70dvh] min-w-0 overflow-x-hidden flex flex-col">
+          <div className="max-h-[calc(100dvh-7rem)] min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain flex flex-col">
             {selections.length === 0 ? (
               /* Empty State */
               <div className="flex items-center justify-center p-8">
@@ -212,7 +212,7 @@ export function MobileBetSlipDrawer({
                 )}
 
                 {/* Selections */}
-                <ScrollArea className="flex-1 custom-scrollbar">
+                <ScrollArea className="max-h-[30dvh] min-h-0 shrink-0 custom-scrollbar">
                   <div className="p-3 space-y-2">
                     {selections.map((selection) => (
                       <div
@@ -251,7 +251,7 @@ export function MobileBetSlipDrawer({
                 </ScrollArea>
 
                 {/* Stake Input */}
-                <div className="min-w-0 p-3 border-t border-border space-y-2 bg-surface/50">
+                <div className="sticky bottom-0 z-10 min-w-0 max-h-[58dvh] shrink-0 overflow-y-auto border-t border-border bg-surface p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] space-y-2 shadow-[0_-10px_30px_rgba(0,0,0,0.35)]">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                       Stake
@@ -345,7 +345,7 @@ export function MobileBetSlipDrawer({
                   {/* Place Bet Button */}
                   <Button
                     className={cn(
-                      "w-full font-bold h-11 shadow-sm text-sm",
+                      "sticky bottom-0 z-20 w-full min-h-12 font-black shadow-lg text-sm",
                       "bg-primary hover:bg-primary/90 active:scale-[0.98]",
                       "disabled:opacity-50"
                     )}
