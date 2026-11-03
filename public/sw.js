@@ -1,4 +1,4 @@
-const CACHE_NAME = "mindbetpro-shell-v10";
+const CACHE_NAME = "mindbetpro-shell-v11";
 const OFFLINE_URL = "/offline.html";
 self.addEventListener("install", (event) => { event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL, "/mindbetpro-icon.svg", "/manifest.webmanifest"])).catch(() => undefined)); self.skipWaiting(); });
 self.addEventListener("activate", (event) => { event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))); self.clients.claim(); });
@@ -10,8 +10,18 @@ self.addEventListener("fetch", (event) => {
   }
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+  if (["script", "style"].includes(event.request.destination)) {
+    event.respondWith(fetch(event.request).then((response) => {
+      if (response.ok) {
+        const copy = response.clone();
+        event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)));
+      }
+      return response;
+    }).catch(() => caches.match(event.request)));
+    return;
+  }
   event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-    if (response.ok && ["style", "script", "font", "image"].includes(event.request.destination)) {
+    if (response.ok && ["font", "image"].includes(event.request.destination)) {
       const copy = response.clone();
       event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)));
     }
