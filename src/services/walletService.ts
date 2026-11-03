@@ -17,24 +17,56 @@ function isLegacyWelcomeTransaction(transaction: any): boolean {
 
 export async function getMyWalletBalances(): Promise<{ balances: WalletBalances | null; error?: string }> {
   try {
-    const { data, error } = await supabase.rpc("get_my_wallet_balances");
-    if (error) throw error;
-    if (!data || typeof data !== "object" || Array.isArray(data)) return { balances: null };
-    const value = data as Record<string, unknown>;
-    // The ledger is authoritative. Legacy demo credits are removed by the
-    // database cleanup migrations; subtracting a client-side offset here also
-    // hides legitimate admin deposits on accounts that retain an old history
-    // marker.
-    const cash = Math.max(0, Number(value.cash || 0));
-    const bonus = Math.max(0, Number(value.bonus || 0));
-    const locked = Math.max(0, Number(value.locked || 0));
-    return { balances: {
-      currency: typeof value.currency === "string" ? value.currency : "USD",
-      cash,
-      bonus,
-      locked,
-      available: cash + bonus,
-    } };
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    if (!user) return { balances: null, error: "Authentication required" };
+
+    // Read the authenticated customer's authoritative ledger rows directly.
+    // RLS restricts this query to auth.uid(), so another customer's wallet
+    // cannot be selected from the browser.
+    const { data: accountRows, error: accountError } = await (supabase as any)
+      .from("ledger_accounts")
+      .select("account_code,balance,currency")
+      .eq("user_id", user.id)
+      .eq("currency", "USD");
+
+    if (accountError) {
+      // Compatibility fallback for databases where the direct ledger SELECT
+      // policy has not yet been installed.
+      const { data, error } = await supabase.rpc("get_my_wallet_balances");
+      if (error) throw error;
+      if (!data || typeof data !== "object" || Array.isArray(data)) return { balances: null };
+      const value = data as Record<string, unknown>;
+      const cash = Math.max(0, Number(value.cash || 0));
+      const bonus = Math.max(0, Number(value.bonus || 0));
+      const locked = Math.max(0, Number(value.locked || 0));
+      return {
+        balances: {
+          currency: typeof value.currency === "string" ? value.currency : "USD",
+          cash,
+          bonus,
+          locked,
+          available: cash + bonus,
+        },
+      };
+    }
+
+    const rows = (accountRows || []) as Array<{ account_code: string; balance: number | string; currency: string }>;
+    const balanceFor = (code: string) =>
+      Math.max(0, Number(rows.find((row) => row.account_code === code)?.balance || 0));
+    const cash = balanceFor("cash");
+    const bonus = balanceFor("bonus");
+    const locked = balanceFor("locked");
+
+    return {
+      balances: {
+        currency: rows[0]?.currency || "USD",
+        cash,
+        bonus,
+        locked,
+        available: cash + bonus,
+      },
+    };
   } catch (error) {
     console.error("Get wallet balances error:", error);
     return { balances: null, error: error instanceof Error ? error.message : "Unable to load wallet balances" };
