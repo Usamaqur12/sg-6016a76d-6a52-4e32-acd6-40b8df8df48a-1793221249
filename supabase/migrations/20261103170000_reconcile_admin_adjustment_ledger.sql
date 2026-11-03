@@ -159,21 +159,6 @@ BEGIN
 END
 $repair$;
 
-UPDATE public.profiles p
-SET demo_balance = balances.available,
-    updated_at = NOW()
-FROM (
-  SELECT
-    user_id,
-    COALESCE(SUM(balance) FILTER (WHERE account_code IN ('cash', 'bonus')), 0) AS available
-  FROM public.ledger_accounts
-  WHERE user_id IS NOT NULL
-    AND currency = 'USD'
-  GROUP BY user_id
-) balances
-WHERE p.id = balances.user_id
-  AND COALESCE(p.demo_balance, 0) IS DISTINCT FROM balances.available;
-
 CREATE OR REPLACE FUNCTION public.verify_admin_adjustment_ledger_mirrored()
 RETURNS TRIGGER
 LANGUAGE plpgsql
