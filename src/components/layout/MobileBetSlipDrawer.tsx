@@ -251,7 +251,7 @@ export function MobileBetSlipDrawer({
                 </ScrollArea>
 
                 {/* Stake Input */}
-                <div className="sticky bottom-0 z-10 min-w-0 max-h-[58dvh] shrink-0 overflow-y-auto border-t border-border bg-surface p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] space-y-2 shadow-[0_-10px_30px_rgba(0,0,0,0.35)]">
+                <div className="min-w-0 shrink-0 overflow-y-auto border-t border-border bg-surface p-3 pb-[calc(5.25rem+env(safe-area-inset-bottom))] space-y-2 shadow-[0_-10px_30px_rgba(0,0,0,0.35)]">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                       Stake
@@ -345,7 +345,7 @@ export function MobileBetSlipDrawer({
                   {/* Place Bet Button */}
                   <Button
                     className={cn(
-                      "sticky bottom-0 z-20 w-full min-h-12 font-black shadow-lg text-sm",
+                      "fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-[70] min-h-12 w-auto font-black shadow-2xl text-sm",
                       "bg-primary hover:bg-primary/90 active:scale-[0.98]",
                       "disabled:opacity-50"
                     )}
