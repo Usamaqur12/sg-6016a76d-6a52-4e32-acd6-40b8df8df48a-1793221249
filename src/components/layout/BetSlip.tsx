@@ -6,6 +6,7 @@ import { placeBet, type OddsAcceptance } from "@/services/bettingService";
 import { useRouter } from "next/router";
 import { cn } from "@/lib/utils";
 import { systemBetPotentialReturn } from "@/lib/systemBetMath";
+import { getMyWalletBalances } from "@/services/walletService";
 
 export function BetSlip() {
   const router = useRouter();
@@ -57,18 +58,15 @@ export function BetSlip() {
     if (systemSize >= betSlip.bets.length) setSystemSize(Math.max(2, betSlip.bets.length - 1));
   }, [betSlip.bets.length, systemSize]);
 
-  const loadProfile = async (userId: string) => {
-    const { data, error } = await (supabase.rpc("get_user_wallet_balance" as any, {
-      p_user_id: userId,
-    }) as unknown as Promise<{
-      data: { cash_balance: number; bonus_balance: number } | null;
-      error: unknown;
-    }>);
-    if (!error && data) {
-      setAvailableBalance(Number(data.cash_balance || 0) + Number(data.bonus_balance || 0));
-    } else {
-      setAvailableBalance(0);
-    }
+  const loadProfile = async (_userId: string) => {
+    const result = await getMyWalletBalances();
+    setAvailableBalance(
+      Number(
+        result.balances?.available ??
+        result.balances?.cash ??
+        0
+      )
+    );
   };
 
   const totalOdds = betSlip.bets.reduce((acc, bet) => acc * bet.odds, 1);
