@@ -167,75 +167,16 @@ export default function AdminUsers() {
   }
 
   async function loadUsers() {
+    setLoading(true);
     try {
-      // Get profiles with wallet and betting stats
-      // account_status is supplied by the customer-controls migration. The
-      // checked-in generated Supabase types may lag that runtime migration, so
-      // this query is narrowed explicitly until types are regenerated.
-      const { data: profileRows } = await (supabase as any)
-        .from("profiles")
-        .select("id, email, full_name, kyc_status, is_suspended, account_status, created_at")
-        .eq("is_admin", false)
-        .order("created_at", { ascending: false });
-      const profiles = (profileRows || []) as ProfileRow[];
-
-      if (profiles) {
-        // Get wallet balances using RPC for each user with type casting
-        const walletPromises = profiles.map(p => 
-          (supabase.rpc("get_user_wallet_balance" as any, { p_user_id: p.id }) as unknown) as Promise<{ data: { cash_balance: number; bonus_balance: number } | null; error: any }>
-        );
-        const walletResults = await Promise.all(walletPromises);
-        
-        // Get bet counts
-        const { data: betCounts } = await supabase
-          .from("bets")
-          .select("user_id")
-          .in("user_id", profiles.map(p => p.id));
-
-        // Get deposit totals
-        const { data: deposits } = await supabase
-          .from("wallet_transactions")
-          .select("user_id, amount")
-          .eq("type", "deposit")
-          .eq("status", "completed")
-          .in("user_id", profiles.map(p => p.id));
-
-        const walletMap = new Map<string, number>();
-        profiles.forEach((p, idx) => {
-          const result = walletResults[idx];
-          if (!result.error && result.data) {
-            walletMap.set(p.id, Number(result.data.cash_balance || 0) + Number(result.data.bonus_balance || 0));
-          }
-        });
-
-        const betCountMap = new Map<string, number>();
-        betCounts?.forEach(b => {
-          betCountMap.set(b.user_id, (betCountMap.get(b.user_id) || 0) + 1);
-        });
-        const depositMap = new Map<string, number>();
-        deposits?.forEach(d => {
-          depositMap.set(d.user_id, (depositMap.get(d.user_id) || 0) + Number(d.amount));
-        });
-
-        const enriched: User[] = profiles.map(p => ({
-          id: p.id,
-          email: p.email,
-          full_name: p.full_name,
-          kyc_status: p.kyc_status || "not_submitted",
-          is_suspended: p.is_suspended || false,
-          account_status: p.account_status === "closed" ? "closed" : "active",
-          created_at: p.created_at,
-          wallet_balance: walletMap.get(p.id) || 0,
-          total_bets: betCountMap.get(p.id) || 0,
-          total_deposits: depositMap.get(p.id) || 0,
-        }));
-
-        setUsers(enriched);
-      }
-    } catch (error: any) {
+      const body = await adminFetch("/api/admin/users", {
+        method: "GET",
+      });
+      setUsers(Array.isArray(body.users) ? body.users : []);
+    } catch (error) {
       toast({
         title: "Error loading users",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Unable to load users",
         variant: "destructive",
       });
     } finally {
