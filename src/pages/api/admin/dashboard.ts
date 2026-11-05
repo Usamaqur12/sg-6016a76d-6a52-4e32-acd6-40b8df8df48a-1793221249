@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { requireAdminApi } from "@/lib/server/requireAdminApi";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
+import { canAccessAdminArea } from "@/lib/adminRoles";
 
 type CountFilter = { column: string; value?: string | boolean; values?: string[] };
 
@@ -56,9 +57,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     safeCount("sports_feed_providers", [{ column: "is_enabled", value: true }, { column: "status", values: ["error", "degraded"] }]),
   ]);
 
+  const access = {
+    payments: canAccessAdminArea(adminAuth.adminRole, "payments"),
+    kyc: canAccessAdminArea(adminAuth.adminRole, "kyc"),
+    support: canAccessAdminArea(adminAuth.adminRole, "support"),
+    risk: canAccessAdminArea(adminAuth.adminRole, "risk"),
+    sports: canAccessAdminArea(adminAuth.adminRole, "sports"),
+    providers: canAccessAdminArea(adminAuth.adminRole, "sports_management"),
+    monitoring: canAccessAdminArea(adminAuth.adminRole, "monitoring"),
+    readiness: adminAuth.adminRole === "super_admin",
+  };
+
   return res.status(200).json({
     generatedAt: new Date().toISOString(),
     queues: { pendingDeposits, pendingWithdrawals, pendingApprovals, openSupportTickets, pendingKyc, unreviewedRiskFlags },
     system: { pendingJobs, failedJobs, liveEvents, upcomingEvents, enabledProviders, unhealthyProviders },
+    access,
   });
 }
