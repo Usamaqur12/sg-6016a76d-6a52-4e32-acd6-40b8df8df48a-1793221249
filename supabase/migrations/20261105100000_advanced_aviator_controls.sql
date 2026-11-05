@@ -826,7 +826,7 @@ CREATE OR REPLACE FUNCTION public.protect_profile_system_fields()
 RETURNS TRIGGER
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path=public,pg_catalog
-AS $
+AS $$
 BEGIN
   IF NOT public.is_service_role() THEN
     IF NEW.demo_balance IS DISTINCT FROM OLD.demo_balance
@@ -857,7 +857,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END
-$;
+$$;
 
 DROP TRIGGER IF EXISTS protect_profile_system_fields_trigger ON public.profiles;
 CREATE TRIGGER protect_profile_system_fields_trigger
