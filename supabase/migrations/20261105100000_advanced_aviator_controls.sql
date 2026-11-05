@@ -822,4 +822,49 @@ $$;
 REVOKE ALL ON FUNCTION public.is_approved_wallet_operation()
   FROM PUBLIC,anon,authenticated;
 
+CREATE OR REPLACE FUNCTION public.protect_profile_system_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path=public,pg_catalog
+AS $
+BEGIN
+  IF NOT public.is_service_role() THEN
+    IF NEW.demo_balance IS DISTINCT FROM OLD.demo_balance
+      AND NOT public.is_approved_wallet_operation()
+    THEN
+      RAISE EXCEPTION 'Profile balance must be changed through an approved server operation';
+    END IF;
+
+    IF (
+      NEW.id IS DISTINCT FROM OLD.id
+      OR NEW.email IS DISTINCT FROM OLD.email
+      OR NEW.is_admin IS DISTINCT FROM OLD.is_admin
+      OR NEW.admin_role IS DISTINCT FROM OLD.admin_role
+    ) AND NOT public.is_super_admin() THEN
+      RAISE EXCEPTION 'Only a super admin can change admin authority';
+    END IF;
+
+    IF NOT public.is_admin() AND (
+      NEW.kyc_status IS DISTINCT FROM OLD.kyc_status
+      OR NEW.is_verified IS DISTINCT FROM OLD.is_verified
+      OR NEW.is_suspended IS DISTINCT FROM OLD.is_suspended
+      OR NEW.suspension_reason IS DISTINCT FROM OLD.suspension_reason
+      OR NEW.referral_code IS DISTINCT FROM OLD.referral_code
+      OR NEW.referred_by IS DISTINCT FROM OLD.referred_by
+    ) THEN
+      RAISE EXCEPTION 'Protected profile fields cannot be changed by this user';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$;
+
+DROP TRIGGER IF EXISTS protect_profile_system_fields_trigger ON public.profiles;
+CREATE TRIGGER protect_profile_system_fields_trigger
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.protect_profile_system_fields();
+
+REVOKE ALL ON FUNCTION public.protect_profile_system_fields()
+  FROM PUBLIC,anon,authenticated;
+
 NOTIFY pgrst,'reload schema';
