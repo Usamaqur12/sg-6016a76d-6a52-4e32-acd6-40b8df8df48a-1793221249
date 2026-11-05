@@ -289,7 +289,7 @@ export default function AdminPayments() {
             <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded border border-border p-3"><div className="font-medium">App ID</div><div className="text-xs text-muted-foreground">{providerStatus?.appIdConfigured ? "Configured" : "Add CCPAYMENT_APP_ID"}</div></div>
               <div className="rounded border border-border p-3"><div className="font-medium">App Secret</div><div className="text-xs text-muted-foreground">{providerStatus?.appSecretConfigured ? "Configured" : "Add CCPAYMENT_APP_SECRET"}</div></div>
-              <div className="rounded border border-border p-3"><div className="font-medium">USD fiat ID</div><div className="text-xs text-muted-foreground">{providerStatus?.fiatIdConfigured ? "Configured" : "Add CCPAYMENT_USD_FIAT_ID"}</div></div>
+              <div className="rounded border border-border p-3"><div className="font-medium">USD fiat ID</div><div className="text-xs text-muted-foreground">{providerStatus?.fiatIdConfigured ? "Override configured" : "Auto-detected from CCPayment"}</div></div>
               <div className="rounded border border-border p-3"><div className="font-medium">Global crypto switch</div><div className="text-xs text-muted-foreground">{providerStatus?.cryptoDepositsEnabled && providerStatus?.customerCryptoEnabled ? "Enabled" : "Enable both crypto environment switches"}</div></div>
             </div>
             {providerStatus?.webhookUrl && (
@@ -340,7 +340,7 @@ export default function AdminPayments() {
               <Button variant="ghost" onClick={() => void loadProviderStatus()}>Refresh status</Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Keep the method disabled until the environment keys, USD fiat ID, webhook domain whitelist and database migration are installed.
+              Keep the method disabled until the environment keys, webhook domain whitelist and database migration are installed. The USD fiat ID is discovered automatically; CCPAYMENT_USD_FIAT_ID remains an optional override.
             </p>
           </CardContent>
         </Card>
