@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
 const BASE_URL = "https://ccpayment.com/ccpayment/v2";
+let usdFiatIdPromise: Promise<string> | null = null;
 
 type CCPaymentEnvelope<T> = {
   code: number;
@@ -16,7 +17,7 @@ export function getCCPaymentConfiguration() {
     appId,
     appSecret,
     fiatId,
-    configured: Boolean(appId && appSecret && fiatId),
+    configured: Boolean(appId && appSecret),
   };
 }
 
@@ -62,4 +63,31 @@ export async function ccPaymentRequest<T>(
   }
 
   return parsed.data;
+}
+
+
+type FiatListResponse = {
+  fiats?: Array<{ fiatId?: string | number; symbol?: string }>;
+};
+
+export async function resolveCCPaymentUsdFiatId() {
+  const configuredId = process.env.CCPAYMENT_USD_FIAT_ID?.trim();
+  if (configuredId) return configuredId;
+
+  if (!usdFiatIdPromise) {
+    usdFiatIdPromise = ccPaymentRequest<FiatListResponse>("getFiatList", {})
+      .then((data) => {
+        const usd = data.fiats?.find((fiat) => fiat.symbol?.toUpperCase() === "USD");
+        if (usd?.fiatId === undefined || usd.fiatId === null) {
+          throw new Error("USD is unavailable in the CCPayment fiat list");
+        }
+        return String(usd.fiatId);
+      })
+      .catch((error) => {
+        usdFiatIdPromise = null;
+        throw error;
+      });
+  }
+
+  return usdFiatIdPromise;
 }
