@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 import { ccPaymentRequest, getCCPaymentConfiguration } from "@/lib/server/ccpayment";
 import { paymentPayloadHash } from "@/lib/server/cryptoPayments";
+import { protectApi } from "@/lib/server/apiProtection";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
 
 const webhookSchema = z.object({
@@ -36,6 +37,7 @@ type OrderInfo = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!await protectApi(req, res, { scope: "ccpayment-webhook", limit: 240, windowMs: 60_000, requireJson: true, failClosed: false })) return;
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
