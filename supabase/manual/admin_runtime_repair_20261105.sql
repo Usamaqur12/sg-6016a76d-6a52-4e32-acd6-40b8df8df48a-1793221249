@@ -1438,5 +1438,8 @@ $$;
 REVOKE ALL ON FUNCTION public.admin_platform_health_check() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_platform_health_check() TO authenticated, service_role;
 
+
+NOTIFY pgrst, 'reload schema';
+
 COMMIT;
 
