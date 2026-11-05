@@ -29,6 +29,16 @@ interface OperationsSummary {
     enabledProviders: number;
     unhealthyProviders: number;
   };
+  access: {
+    payments: boolean;
+    kyc: boolean;
+    support: boolean;
+    risk: boolean;
+    sports: boolean;
+    providers: boolean;
+    monitoring: boolean;
+    readiness: boolean;
+  };
 }
 
 interface RiskAlert {
@@ -357,13 +367,13 @@ export default function AdminDashboard() {
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-6 md:grid-cols-3 xl:grid-cols-6">
                   {[
-                    { label: "Deposits", value: operations.queues.pendingDeposits, icon: Landmark, href: "/admin/payments" },
-                    { label: "Withdrawals", value: operations.queues.pendingWithdrawals, icon: Wallet, href: "/admin/payments" },
-                    { label: "Approvals", value: operations.queues.pendingApprovals, icon: CheckSquare, href: "/admin/payments" },
-                    { label: "KYC review", value: operations.queues.pendingKyc, icon: FileCheck, href: "/admin/kyc" },
-                    { label: "Support", value: operations.queues.openSupportTickets, icon: Headphones, href: "/admin/support" },
-                    { label: "Risk flags", value: operations.queues.unreviewedRiskFlags, icon: ShieldAlert, href: "/admin/risk" },
-                  ].map((item) => (
+                    { label: "Deposits", value: operations.queues.pendingDeposits, icon: Landmark, href: "/admin/payments", allowed: operations.access.payments },
+                    { label: "Withdrawals", value: operations.queues.pendingWithdrawals, icon: Wallet, href: "/admin/payments", allowed: operations.access.payments },
+                    { label: "Approvals", value: operations.queues.pendingApprovals, icon: CheckSquare, href: "/admin/payments", allowed: operations.access.payments },
+                    { label: "KYC review", value: operations.queues.pendingKyc, icon: FileCheck, href: "/admin/kyc", allowed: operations.access.kyc },
+                    { label: "Support", value: operations.queues.openSupportTickets, icon: Headphones, href: "/admin/support", allowed: operations.access.support },
+                    { label: "Risk flags", value: operations.queues.unreviewedRiskFlags, icon: ShieldAlert, href: "/admin/risk", allowed: operations.access.risk },
+                  ].filter((item) => item.allowed).map((item) => (
                     <button key={item.label} onClick={() => router.push(item.href)} className="rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/50">
                       <div className="flex items-center justify-between"><item.icon className="h-4 w-4 text-muted-foreground" /><span className={item.value > 0 ? "text-warning" : "text-success"}>{item.value}</span></div>
                       <p className="mt-2 text-xs font-medium">{item.label}</p>
@@ -374,10 +384,10 @@ export default function AdminDashboard() {
                 <Card className="surface mb-6">
                   <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><ServerCog className="h-5 w-5" />Live platform status</CardTitle></CardHeader>
                   <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <button onClick={() => router.push("/admin/sports")} className="rounded-lg border p-3 text-left"><Radio className="mb-2 h-4 w-4 text-primary" /><div className="text-2xl font-bold">{operations.system.liveEvents}</div><div className="text-xs text-muted-foreground">Live events · {operations.system.upcomingEvents} upcoming</div></button>
-                    <button onClick={() => router.push("/admin/providers")} className="rounded-lg border p-3 text-left"><Activity className="mb-2 h-4 w-4 text-primary" /><div className="text-2xl font-bold">{operations.system.enabledProviders}</div><div className="text-xs text-muted-foreground">Enabled providers · {operations.system.unhealthyProviders} unhealthy</div></button>
-                    <button onClick={() => router.push("/admin/monitoring")} className="rounded-lg border p-3 text-left"><ServerCog className="mb-2 h-4 w-4 text-primary" /><div className="text-2xl font-bold">{operations.system.pendingJobs}</div><div className="text-xs text-muted-foreground">Pending jobs · {operations.system.failedJobs} failed</div></button>
-                    <button onClick={() => router.push("/admin/readiness")} className="rounded-lg border p-3 text-left"><CheckSquare className="mb-2 h-4 w-4 text-primary" /><div className="text-sm font-bold">Launch readiness</div><div className="mt-2 text-xs text-muted-foreground">Check secrets, database and external services</div></button>
+                    {operations.access.sports && <button onClick={() => router.push("/admin/sports")} className="rounded-lg border p-3 text-left"><Radio className="mb-2 h-4 w-4 text-primary" /><div className="text-2xl font-bold">{operations.system.liveEvents}</div><div className="text-xs text-muted-foreground">Live events · {operations.system.upcomingEvents} upcoming</div></button>}
+                    {operations.access.providers && <button onClick={() => router.push("/admin/providers")} className="rounded-lg border p-3 text-left"><Activity className="mb-2 h-4 w-4 text-primary" /><div className="text-2xl font-bold">{operations.system.enabledProviders}</div><div className="text-xs text-muted-foreground">Enabled providers · {operations.system.unhealthyProviders} unhealthy</div></button>}
+                    {operations.access.monitoring && <button onClick={() => router.push("/admin/monitoring")} className="rounded-lg border p-3 text-left"><ServerCog className="mb-2 h-4 w-4 text-primary" /><div className="text-2xl font-bold">{operations.system.pendingJobs}</div><div className="text-xs text-muted-foreground">Pending jobs · {operations.system.failedJobs} failed</div></button>}
+                    {operations.access.readiness && <button onClick={() => router.push("/admin/readiness")} className="rounded-lg border p-3 text-left"><CheckSquare className="mb-2 h-4 w-4 text-primary" /><div className="text-sm font-bold">Launch readiness</div><div className="mt-2 text-xs text-muted-foreground">Check secrets, database and external services</div></button>}
                   </CardContent>
                 </Card>
               </>
