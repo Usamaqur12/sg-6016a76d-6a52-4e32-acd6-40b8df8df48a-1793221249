@@ -41,6 +41,24 @@ function canManageFinance(role: string) {
   return role === "super_admin" || role === "finance";
 }
 
+function getOperationError(error: unknown) {
+  const details =
+    error instanceof Error
+      ? error.message
+      : error && typeof error === "object" && "message" in error
+        ? String((error as { message?: unknown }).message || "")
+        : String(error || "");
+
+  const schemaNotReady = /get_finance_summary|finance_settings|finance_adjustments|casino_provider_settlements|schema cache|does not exist/i.test(details);
+  return {
+    status: schemaNotReady ? 503 : 500,
+    code: schemaNotReady ? "REVENUE_SCHEMA_NOT_READY" : "REVENUE_OPERATION_FAILED",
+    message: schemaNotReady
+      ? `Revenue database objects are not active. Run supabase/migrations/20261102120000_revenue_accounting.sql in Supabase SQL Editor. Database detail: ${details}`
+      : details || "Revenue operation failed",
+  };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const auth = await requireAdminApi(req, res);
   if (!auth) return;
@@ -163,6 +181,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" });
   } catch (error) {
     console.error("Revenue operation failed", error);
-    return res.status(500).json({ error: error instanceof Error ? error.message : "Revenue operation failed" });
+    const operationError = getOperationError(error);
+    return res.status(operationError.status).json({
+      error: operationError.message,
+      code: operationError.code,
+    });
   }
 }
