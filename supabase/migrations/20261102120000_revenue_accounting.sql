@@ -192,7 +192,7 @@ $$;
 
 
 CREATE OR REPLACE FUNCTION public.accrue_partner_casino_commission()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_broker public.brokers%ROWTYPE; v_ggr NUMERIC; v_commission NUMERIC;
 BEGIN
   SELECT b.* INTO v_broker
@@ -208,14 +208,14 @@ BEGIN
   ON CONFLICT(broker_id,source_type,source_id) DO NOTHING;
   RETURN NEW;
 END;
-$;
+$$;
 DROP TRIGGER IF EXISTS accrue_partner_casino_commission_trigger ON public.casino_transactions;
 CREATE TRIGGER accrue_partner_casino_commission_trigger
 AFTER INSERT ON public.casino_transactions
 FOR EACH ROW EXECUTE FUNCTION public.accrue_partner_casino_commission();
 
 CREATE OR REPLACE FUNCTION public.accrue_partner_aviator_commission()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_broker public.brokers%ROWTYPE; v_ggr NUMERIC; v_commission NUMERIC;
 BEGIN
   IF OLD.status<>'placed' OR NEW.status NOT IN ('cashed_out','lost','refunded') THEN RETURN NEW; END IF;
@@ -232,7 +232,7 @@ BEGIN
   ON CONFLICT(broker_id,source_type,source_id) DO NOTHING;
   RETURN NEW;
 END;
-$;
+$$;
 DROP TRIGGER IF EXISTS accrue_partner_aviator_commission_trigger ON public.aviator_bets;
 CREATE TRIGGER accrue_partner_aviator_commission_trigger
 AFTER UPDATE OF status,payout ON public.aviator_bets
@@ -359,7 +359,7 @@ RETURNS INTEGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path=public
-AS $
+AS $$
 DECLARE v_count INTEGER;
 BEGIN
   IF NOT public.has_admin_role(ARRAY['super_admin','admin','sports_trader']) THEN
@@ -376,11 +376,11 @@ BEGIN
   GET DIAGNOSTICS v_count=ROW_COUNT;
   RETURN v_count;
 END;
-$;
+$$;
 
 
 CREATE OR REPLACE FUNCTION public.get_my_broker_dashboard()
-RETURNS JSONB LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $
+RETURNS JSONB LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
   WITH mine AS (SELECT * FROM public.brokers WHERE user_id=auth.uid()),
   all_commissions AS (
     SELECT bc.broker_id,bc.gross_revenue,bc.commission_amount,bc.status
@@ -411,10 +411,10 @@ RETURNS JSONB LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $
     'commissionAvailable',GREATEST(commission_totals.commission_earned-payout_totals.commission_reserved-payout_totals.commission_paid,0),
     'commissionReserved',payout_totals.commission_reserved,'commissionPaid',payout_totals.commission_paid
   ) END FROM commission_totals,player_totals,payout_totals;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION public.request_broker_payout(p_amount NUMERIC,p_destination_reference TEXT)
-RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+RETURNS UUID LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_user UUID:=auth.uid(); v_broker public.brokers%ROWTYPE; v_earned NUMERIC; v_committed NUMERIC; v_id UUID;
 BEGIN
   SELECT * INTO v_broker FROM public.brokers WHERE user_id=v_user AND status='active' FOR UPDATE;
@@ -435,7 +435,7 @@ BEGIN
   VALUES(v_broker.id,p_amount,trim(p_destination_reference)) RETURNING id INTO v_id;
   RETURN v_id;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.accrue_partner_casino_commission() FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.accrue_partner_aviator_commission() FROM PUBLIC,anon,authenticated;
