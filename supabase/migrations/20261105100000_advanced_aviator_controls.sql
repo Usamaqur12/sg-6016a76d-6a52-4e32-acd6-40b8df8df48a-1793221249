@@ -26,6 +26,12 @@ ALTER TABLE public.aviator_bets
   ADD COLUMN IF NOT EXISTS auto_cashout_multiplier NUMERIC(12,2),
   ADD COLUMN IF NOT EXISTS result_reason TEXT;
 
+-- Keep newly introduced defaults valid for installations where an operator
+-- previously lowered the global multiplier cap.
+UPDATE public.aviator_settings
+SET max_auto_cashout=LEAST(max_auto_cashout,max_multiplier),
+    min_auto_cashout=LEAST(min_auto_cashout,LEAST(max_auto_cashout,max_multiplier));
+
 DO $constraints$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='aviator_settings_advanced_limits_check') THEN
