@@ -7,6 +7,10 @@ const supabasePublicKey = (
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )?.trim();
+const supabaseServiceKey = (
+  process.env.SUPABASE_SECRET_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)?.trim();
 
 type ApiRequirement = AdminArea | "super_admin";
 
@@ -37,7 +41,18 @@ export async function requireAdminApi(
   res: NextApiResponse
 ): Promise<{ userId: string; adminRole: string } | null> {
   if (!supabaseUrl || !supabasePublicKey) {
-    res.status(503).json({ error: "Supabase authentication is not configured" });
+    res.status(503).json({
+      error: "Supabase authentication is not configured",
+      code: "SUPABASE_PUBLIC_CONFIG_MISSING",
+    });
+    return null;
+  }
+
+  if (!supabaseServiceKey) {
+    res.status(503).json({
+      error: "Server Supabase key is missing. Add SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY) in the deployment environment and redeploy.",
+      code: "SUPABASE_SERVER_KEY_MISSING",
+    });
     return null;
   }
 
