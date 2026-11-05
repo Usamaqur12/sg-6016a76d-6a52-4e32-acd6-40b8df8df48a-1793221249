@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { CheckCircle2, CreditCard, Eye, PauseCircle, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, CreditCard, ExternalLink, Eye, PauseCircle, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,18 @@ type WithdrawalRequest = {
 
 type ApprovalRequest = { id: string; action_type: "manual_deposit" | "large_withdrawal"; entity_id: string; requested_by: string; request_note: string | null; payload: { amount?: number; user_id?: string; destination?: string }; status: string; created_at: string };
 
+type PaymentProviderStatus = {
+  configured: boolean;
+  appIdConfigured: boolean;
+  appSecretConfigured: boolean;
+  fiatIdConfigured: boolean;
+  cryptoDepositsEnabled: boolean;
+  customerCryptoEnabled: boolean;
+  methodExists: boolean;
+  methodEnabled: boolean;
+  webhookUrl: string | null;
+};
+
 const emptyForm = {
   name: "",
   code: "",
@@ -79,6 +91,7 @@ export default function AdminPayments() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [adminId, setAdminId] = useState<string | null>(null);
+  const [providerStatus, setProviderStatus] = useState<PaymentProviderStatus | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -102,18 +115,33 @@ export default function AdminPayments() {
     setLoading(false);
   }, [toast]);
 
+  const loadProviderStatus = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+    try {
+      const response = await fetch("/api/admin/payment-providers/status", {
+        headers: { authorization: `Bearer ${session.access_token}` },
+      });
+      const body = await response.json();
+      if (response.ok) setProviderStatus(body as PaymentProviderStatus);
+    } catch {
+      // The payment methods page remains usable while readiness is unavailable.
+    }
+  }, []);
+
   const initialize = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { await router.push("/admin/login"); return; }
     setAdminId(user.id);
     const { data: profile } = await supabase.from("profiles").select("admin_role").eq("id", user.id).single();
     if (!profile || !canAccessAdminArea(profile.admin_role, "payments")) { await router.push("/"); return; }
-    await loadData();
-  }, [loadData, router]);
+    await Promise.all([loadData(), loadProviderStatus()]);
+  }, [loadData, loadProviderStatus, router]);
 
   useEffect(() => { void initialize(); }, [initialize]);
 
   const pendingCount = useMemo(() => requests.filter((item) => item.status === "pending").length + withdrawals.filter((item) => item.status === "pending").length, [requests, withdrawals]);
+  const ccPaymentMethod = methods.find((item) => item.method_type === "provider" && item.provider_code === "ccpayment");
 
   function startEdit(method: PaymentMethod) {
     setEditingId(method.id);
@@ -166,7 +194,7 @@ export default function AdminPayments() {
       p_display_order: Number(values.displayOrder),
     });
     if (error) toast({ title: "Payment method save failed", description: error.message, variant: "destructive" });
-    else { toast({ title: targetId ? "Payment method updated" : "Payment method added" }); resetForm(); await loadData(); }
+    else { toast({ title: targetId ? "Payment method updated" : "Payment method added" }); resetForm(); await Promise.all([loadData(), loadProviderStatus()]); }
     setProcessing(null);
   }
 
@@ -241,6 +269,81 @@ export default function AdminPayments() {
           <Card><CardContent className="p-4"><div className="text-2xl font-bold text-success">{methods.filter((item) => item.is_enabled).length}</div><div className="text-xs text-muted-foreground">Enabled for customers</div></CardContent></Card>
           <Card><CardContent className="p-4"><div className="text-2xl font-bold text-warning">{pendingCount}</div><div className="text-xs text-muted-foreground">Finance requests awaiting review</div></CardContent></Card>
         </div>
+
+        <Card className="border-primary/30">
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+              CCPayment hosted crypto checkout
+              <Badge variant={providerStatus?.configured ? "default" : "outline"}>
+                {providerStatus?.configured ? "Server configured" : "Needs environment keys"}
+              </Badge>
+              <Badge variant={ccPaymentMethod?.is_enabled ? "default" : "secondary"}>
+                {ccPaymentMethod?.is_enabled ? "Customer enabled" : "Customer disabled"}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Customers choose a supported coin and network on CCPayment. Confirmed payments are reconciled through the signed CCPayment API before the wallet ledger is credited.
+            </p>
+            <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded border border-border p-3"><div className="font-medium">App ID</div><div className="text-xs text-muted-foreground">{providerStatus?.appIdConfigured ? "Configured" : "Add CCPAYMENT_APP_ID"}</div></div>
+              <div className="rounded border border-border p-3"><div className="font-medium">App Secret</div><div className="text-xs text-muted-foreground">{providerStatus?.appSecretConfigured ? "Configured" : "Add CCPAYMENT_APP_SECRET"}</div></div>
+              <div className="rounded border border-border p-3"><div className="font-medium">USD fiat ID</div><div className="text-xs text-muted-foreground">{providerStatus?.fiatIdConfigured ? "Configured" : "Add CCPAYMENT_USD_FIAT_ID"}</div></div>
+              <div className="rounded border border-border p-3"><div className="font-medium">Global crypto switch</div><div className="text-xs text-muted-foreground">{providerStatus?.cryptoDepositsEnabled && providerStatus?.customerCryptoEnabled ? "Enabled" : "Enable both crypto environment switches"}</div></div>
+            </div>
+            {providerStatus?.webhookUrl && (
+              <div className="rounded border border-border bg-muted/30 p-3">
+                <Label>CCPayment Developer → Webhook / notifyUrl</Label>
+                <code className="mt-1 block break-all text-xs text-muted-foreground">{providerStatus.webhookUrl}</code>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {!ccPaymentMethod ? (
+                <Button
+                  onClick={() => void saveMethod({
+                    name: "CCPayment Crypto Checkout",
+                    code: "ccpayment",
+                    methodType: "provider",
+                    providerCode: "ccpayment",
+                    currency: "USD",
+                    network: "Multi-chain",
+                    destination: "",
+                    instructions: "Choose your coin and network on the secure CCPayment checkout page.",
+                    minAmount: "10",
+                    maxAmount: "100000",
+                    displayOrder: "10",
+                    enabled: false,
+                  }, null)}
+                  disabled={processing === "new"}
+                >
+                  <Plus className="mr-2 h-4 w-4" />Add CCPayment
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => startEdit(ccPaymentMethod)}>
+                    <Pencil className="mr-2 h-4 w-4" />Edit CCPayment
+                  </Button>
+                  <Button
+                    disabled={processing === ccPaymentMethod.id || (!ccPaymentMethod.is_enabled && !providerStatus?.configured)}
+                    onClick={() => void toggleMethod(ccPaymentMethod)}
+                  >
+                    {ccPaymentMethod.is_enabled ? "Disable for customers" : "Enable for customers"}
+                  </Button>
+                </>
+              )}
+              <Button variant="outline" asChild>
+                <a href="https://ccpayment.com/user/developer" target="_blank" rel="noreferrer">
+                  Open CCPayment Developer <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+              <Button variant="ghost" onClick={() => void loadProviderStatus()}>Refresh status</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Keep the method disabled until the environment keys, USD fiat ID, webhook domain whitelist and database migration are installed.
+            </p>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Plus className="h-5 w-5" />{editingId ? "Edit payment method" : "Add payment method"}</CardTitle></CardHeader>
