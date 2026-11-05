@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bitcoin, CreditCard, Copy } from "lucide-react";
+import { Bitcoin, CreditCard, Copy, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -35,6 +35,7 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
   const { toast } = useToast();
   const [depositAmount, setDepositAmount] = useState("25");
   const [depositCurrency, setDepositCurrency] = useState("usdttrc20");
+  const [selectedProvider, setSelectedProvider] = useState("ccpayment");
   const [creatingDeposit, setCreatingDeposit] = useState(false);
   const [cryptoInvoice, setCryptoInvoice] = useState<any>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -45,11 +46,9 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
   const [manualProof, setManualProof] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  useState(() => {
-    if (open) {
-      loadPaymentMethods();
-    }
-  });
+  useEffect(() => {
+    if (open) void loadPaymentMethods();
+  }, [open]);
 
   async function loadPaymentMethods() {
     const { data } = await (supabase as any)
@@ -63,6 +62,10 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
     
     const manualMethod = methods.find(m => m.method_type !== "provider");
     if (manualMethod) setSelectedMethod(manualMethod.id);
+
+    const provider = methods.find(m => m.method_type === "provider" && m.provider_code === "ccpayment")
+      || methods.find(m => m.method_type === "provider" && m.provider_code === "nowpayments");
+    if (provider?.provider_code) setSelectedProvider(provider.provider_code);
   }
 
   async function createCryptoDeposit() {
@@ -77,24 +80,30 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Please sign in again");
 
-      const response = await fetch("/api/payments/crypto/create", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          amount,
-          payCurrency: depositCurrency,
-          idempotencyKey: crypto.randomUUID(),
-        }),
-      });
+      const isCCPayment = selectedProvider === "ccpayment";
+      const response = await fetch(
+        isCCPayment ? "/api/payments/crypto/ccpayment-create" : "/api/payments/crypto/create",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            amount,
+            ...(isCCPayment ? {} : { payCurrency: depositCurrency }),
+            idempotencyKey: crypto.randomUUID(),
+          }),
+        }
+      );
 
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Failed to create invoice");
 
       setCryptoInvoice(body.invoice);
-      toast({ title: "Crypto invoice created" });
+      toast({
+        title: body.invoice?.checkout_url ? "Secure checkout is ready" : "Crypto invoice created",
+      });
     } catch (error) {
       toast({
         title: "Deposit failed",
@@ -180,9 +189,10 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
     }
   }
 
-  const providerEnabled = paymentMethods.some(
-    m => m.method_type === "provider" && m.provider_code === "nowpayments"
+  const providerMethods = paymentMethods.filter(
+    m => m.method_type === "provider" && ["ccpayment", "nowpayments"].includes(m.provider_code || "")
   );
+  const providerEnabled = providerMethods.length > 0;
   const cryptoEnabled = process.env.NEXT_PUBLIC_CRYPTO_DEPOSITS_ENABLED === "true" && providerEnabled;
   const manualMethods = paymentMethods.filter(m => m.method_type !== "provider");
   const kycApproved = true; // KYC is not required by platform policy.
@@ -221,42 +231,63 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
           <TabsContent value="crypto" className="space-y-4">
             {cryptoInvoice ? (
               <div className="space-y-4">
-                <div className="rounded-lg border border-success/30 bg-success/5 p-4">
-                  <Label className="text-xs uppercase text-muted-foreground">Send Exactly</Label>
-                  <div className="text-2xl font-bold font-mono mt-1">
-                    {cryptoInvoice.pay_amount} {String(cryptoInvoice.pay_currency).toUpperCase()}
-                  </div>
-
-                  <Label className="text-xs uppercase text-muted-foreground mt-4 block">
-                    Deposit Address
-                  </Label>
-                  <div className="flex gap-2 mt-1">
-                    <Input
-                      readOnly
-                      value={cryptoInvoice.pay_address || ""}
-                      className="font-mono text-xs"
-                    />
+                {cryptoInvoice.checkout_url ? (
+                  <div className="space-y-4 rounded-lg border border-success/30 bg-success/5 p-4">
+                    <div>
+                      <Label className="text-xs uppercase text-muted-foreground">CCPayment secure checkout</Label>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Choose a supported coin and network on CCPayment. Your wallet is credited only after the payment is confirmed and reconciled.
+                      </p>
+                    </div>
                     <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => navigator.clipboard.writeText(cryptoInvoice.pay_address || "")}
+                      className="w-full"
+                      onClick={() => window.location.assign(cryptoInvoice.checkout_url)}
                     >
-                      <Copy className="h-4 w-4" />
+                      Continue to CCPayment
+                      <ExternalLink className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
-
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Funds credit after blockchain confirmation. Wrong network may lose funds.
-                  </p>
-                </div>
-
+                ) : (
+                  <div className="rounded-lg border border-success/30 bg-success/5 p-4">
+                    <Label className="text-xs uppercase text-muted-foreground">Send Exactly</Label>
+                    <div className="mt-1 font-mono text-2xl font-bold">
+                      {cryptoInvoice.pay_amount} {String(cryptoInvoice.pay_currency).toUpperCase()}
+                    </div>
+                    <Label className="mt-4 block text-xs uppercase text-muted-foreground">Deposit Address</Label>
+                    <div className="mt-1 flex gap-2">
+                      <Input readOnly value={cryptoInvoice.pay_address || ""} className="font-mono text-xs" />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => navigator.clipboard.writeText(cryptoInvoice.pay_address || "")}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Funds credit after blockchain confirmation. Wrong network may lose funds.
+                    </p>
+                  </div>
+                )}
                 <Button variant="outline" onClick={() => setCryptoInvoice(null)} className="w-full">
                   Create New Invoice
                 </Button>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Payment provider</Label>
+                  <Select value={selectedProvider} onValueChange={(value) => { setSelectedProvider(value); setCryptoInvoice(null); }}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {providerMethods.map((method) => (
+                        <SelectItem key={method.id} value={method.provider_code!}>{method.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className={`grid gap-4 ${selectedProvider === "ccpayment" ? "" : "sm:grid-cols-2"}`}>
                   <div className="space-y-2">
                     <Label htmlFor="crypto-amount">USD Amount</Label>
                     <Input
@@ -270,29 +301,35 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Cryptocurrency</Label>
-                    <Select value={depositCurrency} onValueChange={setDepositCurrency}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="usdttrc20">USDT · TRON</SelectItem>
-                        <SelectItem value="usdtbsc">USDT · BSC</SelectItem>
-                        <SelectItem value="btc">Bitcoin</SelectItem>
-                        <SelectItem value="eth">Ethereum</SelectItem>
-                        <SelectItem value="ltc">Litecoin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {selectedProvider !== "ccpayment" && (
+                    <div className="space-y-2">
+                      <Label>Cryptocurrency</Label>
+                      <Select value={depositCurrency} onValueChange={setDepositCurrency}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="usdttrc20">USDT · TRON</SelectItem>
+                          <SelectItem value="usdtbsc">USDT · BSC</SelectItem>
+                          <SelectItem value="btc">Bitcoin</SelectItem>
+                          <SelectItem value="eth">Ethereum</SelectItem>
+                          <SelectItem value="ltc">Litecoin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
 
-                <Button
-                  onClick={createCryptoDeposit}
-                  disabled={creatingDeposit}
-                  className="w-full"
-                >
-                  {creatingDeposit ? "Creating Invoice..." : "Create Crypto Invoice"}
+                {selectedProvider === "ccpayment" && (
+                  <p className="text-xs text-muted-foreground">
+                    CCPayment opens a secure hosted page where you choose the coin and network.
+                  </p>
+                )}
+
+                <Button onClick={createCryptoDeposit} disabled={creatingDeposit} className="w-full">
+                  {creatingDeposit
+                    ? "Creating Invoice..."
+                    : selectedProvider === "ccpayment"
+                      ? "Continue to Secure Checkout"
+                      : "Create Crypto Invoice"}
                 </Button>
               </div>
             )}
