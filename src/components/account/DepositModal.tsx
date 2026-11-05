@@ -36,6 +36,7 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
   const [depositAmount, setDepositAmount] = useState("25");
   const [depositCurrency, setDepositCurrency] = useState("usdttrc20");
   const [selectedProvider, setSelectedProvider] = useState("ccpayment");
+  const [activeTab, setActiveTab] = useState("manual");
   const [creatingDeposit, setCreatingDeposit] = useState(false);
   const [cryptoInvoice, setCryptoInvoice] = useState<any>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -65,7 +66,12 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
 
     const provider = methods.find(m => m.method_type === "provider" && m.provider_code === "ccpayment")
       || methods.find(m => m.method_type === "provider" && m.provider_code === "nowpayments");
-    if (provider?.provider_code) setSelectedProvider(provider.provider_code);
+    if (provider?.provider_code) {
+      setSelectedProvider(provider.provider_code);
+      setActiveTab("crypto");
+    } else if (manualMethod) {
+      setActiveTab("manual");
+    }
   }
 
   async function createCryptoDeposit() {
@@ -216,7 +222,7 @@ export function DepositModal({ open, onClose, kycStatus, onDepositComplete }: De
           </div>
         )}
 
-        <Tabs defaultValue={cryptoEnabled ? "crypto" : "manual"} className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="crypto" disabled={!cryptoEnabled || !kycApproved}>
               <Bitcoin className="h-4 w-4 mr-2" />
