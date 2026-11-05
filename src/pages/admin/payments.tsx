@@ -340,7 +340,7 @@ export default function AdminPayments() {
               <Button variant="ghost" onClick={() => void loadProviderStatus()}>Refresh status</Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Keep the method disabled until the environment keys, webhook domain whitelist and database migration are installed. The USD fiat ID is discovered automatically; CCPAYMENT_USD_FIAT_ID remains an optional override.
+              Keep the method disabled until the environment keys, database migration, CCPayment notifyUrl domain whitelist and deployment outbound-IP whitelist are ready. The USD fiat ID is discovered automatically; CCPAYMENT_USD_FIAT_ID remains an optional override.
             </p>
           </CardContent>
         </Card>
