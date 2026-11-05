@@ -6,13 +6,16 @@ const supabaseServiceKey = (
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )?.trim();
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error(
-    "Server Supabase configuration is missing. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY)."
-  );
-}
+/**
+ * Keep API modules loadable even when a deployment secret is missing.
+ * requireAdminApi returns a clear 503 before any privileged query executes.
+ */
+export const isSupabaseAdminConfigured = Boolean(supabaseUrl && supabaseServiceKey);
 
-export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+const clientUrl = supabaseUrl || "http://127.0.0.1:54321";
+const clientKey = supabaseServiceKey || "missing-server-supabase-key";
+
+export const supabase = createClient(clientUrl, clientKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
