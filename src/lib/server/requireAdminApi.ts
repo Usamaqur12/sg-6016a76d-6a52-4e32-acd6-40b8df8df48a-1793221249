@@ -13,6 +13,8 @@ type ApiRequirement = AdminArea | "super_admin";
 const ADMIN_API_ACCESS: Array<{ prefix: string; requirement: ApiRequirement }> = [
   { prefix: "/api/admin/admin-users", requirement: "super_admin" },
   { prefix: "/api/admin/readiness", requirement: "super_admin" },
+  { prefix: "/api/admin/audit", requirement: "audit" },
+  { prefix: "/api/admin/revenue", requirement: "reports" },
   { prefix: "/api/admin/dashboard", requirement: "dashboard" },
   { prefix: "/api/admin/users", requirement: "users" },
   { prefix: "/api/admin/kyc", requirement: "kyc" },
