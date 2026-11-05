@@ -49,8 +49,9 @@ export default function AdminLogin() {
         throw new Error("Admin access denied");
       }
 
-      // Redirect to admin portal - no 2FA check
-      await router.push("/admin");
+      const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const needsChallenge = assurance?.currentLevel !== "aal2" && assurance?.nextLevel === "aal2";
+      await router.push(needsChallenge ? "/admin/security" : "/admin");
     } catch (err: any) {
       setError(err.message || "Login failed");
       setLoading(false);
