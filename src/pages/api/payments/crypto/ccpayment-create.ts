@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
-import { ccPaymentRequest, getCCPaymentConfiguration } from "@/lib/server/ccpayment";
+import { ccPaymentRequest, getCCPaymentConfiguration, resolveCCPaymentUsdFiatId } from "@/lib/server/ccpayment";
 import { protectApi } from "@/lib/server/apiProtection";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
 
@@ -149,12 +149,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    const fiatId = await resolveCCPaymentUsdFiatId();
     const root = baseUrl.toString().replace(/\/$/, "");
     const provider = await ccPaymentRequest<InvoiceResponse>("createInvoiceUrl", {
       orderId: invoiceId,
       product: "MindBet Pro wallet deposit",
       price: amount.toFixed(2),
-      priceFiatId: config.fiatId,
+      priceFiatId: fiatId,
       buyerEmail: authData.user.email || undefined,
       returnUrl: `${root}/wallet?payment=ccpayment`,
       closeUrl: `${root}/wallet`,
