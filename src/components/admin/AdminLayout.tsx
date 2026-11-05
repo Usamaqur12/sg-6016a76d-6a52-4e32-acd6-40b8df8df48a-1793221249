@@ -17,6 +17,7 @@ type RouteRequirement = AdminArea | "super_admin";
 
 const ADMIN_ROUTE_ACCESS: Record<string, RouteRequirement> = {
   "/admin": "dashboard",
+  "/admin/security": "dashboard",
   "/admin/admin-users": "super_admin",
   "/admin/users": "users",
   "/admin/users/[id]": "users",
@@ -47,6 +48,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [adminRole, setAdminRole] = useState<string>("admin");
+  const [assuranceLevel, setAssuranceLevel] = useState<string>("aal1");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast } = useToast();
 
@@ -93,6 +95,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        setAssuranceLevel(assurance?.currentLevel || "aal1");
         setAdminRole(role);
         setLoading(false);
       } catch (error) {
@@ -120,6 +124,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   // Role-based navigation - only show allowed sections
   const allNavItems = [
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard, areas: ["dashboard"] },
+    { href: "/admin/security", label: "Admin Security", icon: Shield, areas: ["dashboard"] },
     { href: "/admin/admin-users", label: "Admin Users", icon: Shield, areas: [], superAdminOnly: true },
     { href: "/admin/users", label: "Users", icon: Users, areas: ["users"] },
     { href: "/admin/kyc", label: "Withdrawal KYC", icon: Shield, areas: ["kyc"] },
@@ -228,6 +233,17 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           </Button>
           <BrandLogo href="/admin" admin compact />
         </div>
+        {assuranceLevel !== "aal2" && router.pathname !== "/admin/security" && (
+          <div className="border-b border-warning/30 bg-warning/10 px-3 py-3 sm:px-5 lg:px-8">
+            <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-warning">Sensitive admin controls need authenticator verification</p>
+                <p className="text-xs text-muted-foreground">Payments, KYC approval, payouts, feature flags and trading rules remain protected until this session is verified.</p>
+              </div>
+              <Link href="/admin/security" className="font-semibold text-primary hover:underline">Set up or verify 2FA</Link>
+            </div>
+          </div>
+        )}
         <main className="p-3 sm:p-5 lg:p-8">{children}</main>
       </div>
     </div>
