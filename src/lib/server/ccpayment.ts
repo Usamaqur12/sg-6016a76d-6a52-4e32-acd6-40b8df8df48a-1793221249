@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 const BASE_URL = "https://ccpayment.com/ccpayment/v2";
 
@@ -12,22 +12,12 @@ export function getCCPaymentConfiguration() {
   const appId = process.env.CCPAYMENT_APP_ID?.trim();
   const appSecret = process.env.CCPAYMENT_APP_SECRET?.trim();
   const fiatId = process.env.CCPAYMENT_USD_FIAT_ID?.trim();
-  const webhookSecret = process.env.CCPAYMENT_WEBHOOK_SECRET?.trim();
-
   return {
     appId,
     appSecret,
     fiatId,
-    webhookSecret,
-    configured: Boolean(appId && appSecret && fiatId && webhookSecret),
+    configured: Boolean(appId && appSecret && fiatId),
   };
-}
-
-export function secureStringEqual(left: string | undefined, right: string | undefined) {
-  if (!left || !right) return false;
-  const leftBuffer = Buffer.from(left, "utf8");
-  const rightBuffer = Buffer.from(right, "utf8");
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 export async function ccPaymentRequest<T>(
