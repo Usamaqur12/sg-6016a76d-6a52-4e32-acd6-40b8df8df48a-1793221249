@@ -142,11 +142,20 @@ const money = (value: number) =>
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
 
+function aviatorOperationError(error: { message?: string } | null | undefined) {
+  const message = error?.message || "Aviator operation failed";
+  if (/aviator_admin_|schema cache|does not exist/i.test(message)) {
+    return "Advanced Aviator database objects are not active. Run supabase/migrations/20261105100000_advanced_aviator_controls.sql in Supabase SQL Editor, then reload this page.";
+  }
+  return message;
+}
+
 export default function AviatorAdminPage() {
   const { toast } = useToast();
   const initialized = useRef(false);
   const [game, setGame] = useState<State | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [dashboardError, setDashboardError] = useState("");
   const [form, setForm] = useState<Settings>(defaults);
   const [reason, setReason] = useState("Operational settings update");
   const [approvalReason, setApprovalReason] = useState("Reviewed and approved");
@@ -162,15 +171,18 @@ export default function AviatorAdminPage() {
       "aviator_admin_get_dashboard"
     );
     if (error) {
+      const description = aviatorOperationError(error);
+      setDashboardError(description);
       if (showError) {
         toast({
           title: "Advanced Aviator controls not ready",
-          description: error.message,
+          description,
           variant: "destructive",
         });
       }
       return;
     }
+    setDashboardError("");
     const next = data as Dashboard;
     setDashboard(next);
     if (!initialized.current) {
@@ -229,7 +241,7 @@ export default function AviatorAdminPage() {
     if (error) {
       toast({
         title: "Settings not saved",
-        description: error.message,
+        description: aviatorOperationError(error),
         variant: "destructive",
       });
     } else {
@@ -261,7 +273,7 @@ export default function AviatorAdminPage() {
     if (error) {
       toast({
         title: "Approval failed",
-        description: error.message,
+        description: aviatorOperationError(error),
         variant: "destructive",
       });
     } else {
@@ -289,6 +301,12 @@ export default function AviatorAdminPage() {
   return (
     <AdminLayout>
       <div className="space-y-5">
+        {dashboardError && (
+          <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm">
+            <p className="font-semibold text-warning">Advanced Aviator database migration required</p>
+            <p className="mt-1 text-muted-foreground">{dashboardError}</p>
+          </div>
+        )}
         <section className="relative overflow-hidden rounded-[28px] border border-cyan-400/15 bg-[#07111f] p-6 text-white shadow-[0_25px_70px_rgba(0,0,0,.35)]">
           <div
             className="absolute inset-0"
