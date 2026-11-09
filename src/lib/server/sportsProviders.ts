@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const providerTypes = ["openligadb", "the_odds_api", "thesportsdb_demo", "thesportsdb_live", "sportmonks"] as const;
+export const providerTypes = ["openligadb", "the_odds_api", "thesportsdb_demo", "thesportsdb_live", "sportmonks", "pandascore"] as const;
 export type SportsProviderType = (typeof providerTypes)[number];
 
 export interface SportsProviderConfig {
@@ -72,6 +72,26 @@ const sportsDbEventSchema = z.object({
   strStatus: z.string().nullish(),
   strProgress: z.string().nullish(),
   strPostponed: z.string().nullish(),
+}).passthrough();
+
+const pandaScoreMatchSchema = z.object({
+  id: z.number(),
+  name: z.string().nullish(),
+  begin_at: z.string().nullish(),
+  scheduled_at: z.string().nullish(),
+  modified_at: z.string().nullish(),
+  status: z.string().nullish(),
+  winner_id: z.number().nullish(),
+  number_of_games: z.number().nullish(),
+  match_type: z.string().nullish(),
+  videogame: z.object({ name: z.string(), slug: z.string().nullish() }).nullish(),
+  league: z.object({ id: z.number(), name: z.string(), image_url: z.string().nullish() }).nullish(),
+  serie: z.object({ name: z.string().nullish(), full_name: z.string().nullish() }).nullish(),
+  tournament: z.object({ name: z.string().nullish() }).nullish(),
+  opponents: z.array(z.object({
+    opponent: z.object({ id: z.number(), name: z.string(), image_url: z.string().nullish() }),
+  })).default([]),
+  results: z.array(z.object({ team_id: z.number(), score: z.number() })).default([]),
 }).passthrough();
 
 function slugify(value: string) {
@@ -148,6 +168,75 @@ async function fetchJson(url: string, init?: RequestInit, timeoutMs = 12_000) {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs), cache: "no-store" });
   if (!response.ok) throw new Error(`Provider returned HTTP ${response.status}`);
   return response.json();
+}
+
+function pandaScoreStatus(value: unknown): NormalizedSportsEvent["status"] {
+  const status = String(value || "").toLowerCase();
+  if (["finished", "completed"].includes(status)) return "finished";
+  if (["canceled", "cancelled"].includes(status)) return "cancelled";
+  if (["postponed"].includes(status)) return "postponed";
+  if (["running", "live"].includes(status)) return "live";
+  return "upcoming";
+}
+
+function normalizePandaScoreMatch(value: unknown, providerId: string): NormalizedSportsEvent | null {
+  const parsed = pandaScoreMatchSchema.safeParse(value);
+  if (!parsed.success || parsed.data.opponents.length < 2) return null;
+  const match = parsed.data;
+  const home = match.opponents[0].opponent;
+  const away = match.opponents[1].opponent;
+  const homeScore = match.results.find((result) => result.team_id === home.id)?.score ?? null;
+  const awayScore = match.results.find((result) => result.team_id === away.id)?.score ?? null;
+  const status = pandaScoreStatus(match.status);
+  const leagueName = [match.videogame?.name, match.league?.name, match.serie?.full_name || match.serie?.name, match.tournament?.name]
+    .filter(Boolean)
+    .filter((part, index, values) => values.indexOf(part) === index)
+    .join(" · ") || "Esports";
+  const winner = match.winner_id === home.id ? "Home" : match.winner_id === away.id ? "Away" : null;
+  const startTime = isoTimestamp(match.begin_at || match.scheduled_at);
+
+  return {
+    updateId: `${match.id}:${match.modified_at || startTime}:${status}:${homeScore ?? "x"}:${awayScore ?? "x"}`,
+    providerId,
+    providerEventId: String(match.id),
+    sport: { name: "Esports", slug: "esports", icon: "🎮" },
+    league: { name: leagueName, slug: slugify(leagueName), country: "Global", logoUrl: imageUrl(match.league?.image_url) },
+    homeTeam: home.name,
+    awayTeam: away.name,
+    homeTeamLogoUrl: imageUrl(home.image_url),
+    awayTeamLogoUrl: imageUrl(away.image_url),
+    startTime,
+    status,
+    homeScore,
+    awayScore,
+    settlementWinner: winner,
+    markets: [],
+  };
+}
+
+async function fetchPandaScore(config: SportsProviderConfig, apiKey: string | null) {
+  if (!apiKey) throw new Error("PandaScore API token is missing");
+  const game = String(config.settings?.game || "all").toLowerCase();
+  const prefixes: Record<string, string> = { lol: "lol/", cs2: "csgo/", csgo: "csgo/", dota2: "dota2/", valorant: "valorant/" };
+  const prefix = prefixes[game] || "";
+  const endpoints = ["upcoming", "running", "past"];
+  const responses = await Promise.allSettled(endpoints.map(async (endpoint) => {
+    const url = new URL(`https://api.pandascore.co/${prefix}matches/${endpoint}`);
+    url.searchParams.set("per_page", endpoint === "past" ? "25" : "100");
+    url.searchParams.set("sort", endpoint === "past" ? "-end_at" : "begin_at");
+    return fetchJson(url.toString(), {
+      headers: { Accept: "application/json", Authorization: `Bearer ${apiKey}` },
+    }, 20_000);
+  }));
+
+  if (responses.every((response) => response.status === "rejected")) {
+    const failure = responses.find((response) => response.status === "rejected");
+    throw failure && failure.status === "rejected" ? failure.reason : new Error("PandaScore request failed");
+  }
+
+  const matches = responses.flatMap((response) => response.status === "fulfilled" && Array.isArray(response.value) ? response.value : []);
+  const normalized = matches.map((match) => normalizePandaScoreMatch(match, config.id)).filter(Boolean) as NormalizedSportsEvent[];
+  return [...new Map(normalized.map((event) => [event.providerEventId, event])).values()];
 }
 
 function arrayFromProviderBody(body: any) {
@@ -804,6 +893,7 @@ export async function fetchProviderEvents(config: SportsProviderConfig, apiKey: 
       ? fetchSportmonksCricket(config, apiKey)
       : fetchSportmonks(config, apiKey);
   }
+  if (config.provider_type === "pandascore") return fetchPandaScore(config, apiKey);
   return fetchSportsDb(config, apiKey);
 }
 

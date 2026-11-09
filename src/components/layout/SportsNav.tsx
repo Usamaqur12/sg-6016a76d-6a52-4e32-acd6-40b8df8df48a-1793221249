@@ -70,7 +70,7 @@ export function SportsNav() {
           const isBettable = event.markets.some((market) =>
             market.outcomes.filter((outcome) => Number.isFinite(outcome.value) && outcome.value > 1).length >= 2
           );
-          if (!isBettable) continue;
+          if (!isBettable && event.sportSlug !== "esports") continue;
 
           const sportId = event.sportSlug === "hockey" ? "ice-hockey" : event.sportSlug;
           const current = grouped.get(sportId) || {

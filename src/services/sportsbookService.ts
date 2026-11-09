@@ -133,7 +133,7 @@ export async function fetchLiveEvents(): Promise<SportsbookEvent[]> {
   if (error) throw error;
   return ((events || []) as unknown as RawSportsbookEvent[])
     .map(mapSportsbookEvent)
-    .filter(isBettableEvent);
+    .filter((event) => isBettableEvent(event) || event.sportSlug === "esports");
 }
 
 export async function fetchUpcomingEvents(sportSlug?: string): Promise<SportsbookEvent[]> {
@@ -161,7 +161,7 @@ export async function fetchUpcomingEvents(sportSlug?: string): Promise<Sportsboo
   if (error) throw error;
   return ((events || []) as unknown as RawSportsbookEvent[])
     .map(mapSportsbookEvent)
-    .filter(isBettableEvent);
+    .filter((event) => isBettableEvent(event) || event.sportSlug === "esports");
 }
 
 export async function fetchEventById(eventId: string) {
