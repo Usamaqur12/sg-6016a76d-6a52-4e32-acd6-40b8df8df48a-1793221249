@@ -18,9 +18,11 @@ export interface NormalizedSportsEvent {
   providerId: string;
   providerEventId: string;
   sport: { name: string; slug: string; icon?: string };
-  league: { name: string; slug: string; country?: string };
+  league: { name: string; slug: string; country?: string; logoUrl?: string };
   homeTeam: string;
   awayTeam: string;
+  homeTeamLogoUrl?: string;
+  awayTeamLogoUrl?: string;
   startTime: string;
   status: "upcoming" | "live" | "finished" | "cancelled" | "postponed";
   homeScore?: number | null;
@@ -62,6 +64,9 @@ const sportsDbEventSchema = z.object({
   strCountry: z.string().nullish(),
   strHomeTeam: z.string().nullish(),
   strAwayTeam: z.string().nullish(),
+  strHomeTeamBadge: z.string().nullish(),
+  strAwayTeamBadge: z.string().nullish(),
+  strLeagueBadge: z.string().nullish(),
   intHomeScore: z.union([z.string(), z.number()]).nullish(),
   intAwayScore: z.union([z.string(), z.number()]).nullish(),
   strStatus: z.string().nullish(),
@@ -77,6 +82,18 @@ function score(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : null;
+}
+
+function imageUrl(value: unknown) {
+  const candidate = String(value || "").trim();
+  if (!candidate) return undefined;
+  if (candidate.startsWith("//")) return `https:${candidate}`;
+  try {
+    const url = new URL(candidate);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isoTimestamp(timestamp?: string | null, date?: string | null, time?: string | null) {
@@ -113,9 +130,11 @@ function normalizeSportsDbEvent(rawValue: unknown, providerId: string): Normaliz
     providerId,
     providerEventId: raw.idEvent,
     sport: { name: sportName === "Soccer" ? "Football" : sportName, slug: sportName === "Soccer" ? "football" : slugify(sportName), icon: sportName === "Soccer" ? "⚽" : "🏆" },
-    league: { name: leagueName, slug: slugify(leagueName), country: raw.strCountry || undefined },
+    league: { name: leagueName, slug: slugify(leagueName), country: raw.strCountry || undefined, logoUrl: imageUrl(raw.strLeagueBadge) },
     homeTeam: raw.strHomeTeam,
     awayTeam: raw.strAwayTeam,
+    homeTeamLogoUrl: imageUrl(raw.strHomeTeamBadge),
+    awayTeamLogoUrl: imageUrl(raw.strAwayTeamBadge),
     startTime,
     status,
     homeScore,
@@ -510,9 +529,16 @@ async function fetchSportmonks(config: SportsProviderConfig, apiKey: string | nu
       providerId: config.id,
       providerEventId: String(fixture.id),
       sport: { name: "Football", slug: "football", icon: "⚽" },
-      league: { name: leagueName, slug: slugify(leagueName), country: fixture.league?.country?.name || undefined },
+      league: {
+        name: leagueName,
+        slug: slugify(leagueName),
+        country: fixture.league?.country?.name || undefined,
+        logoUrl: imageUrl(fixture.league?.image_path || fixture.league?.logo_path),
+      },
       homeTeam,
       awayTeam,
+      homeTeamLogoUrl: imageUrl(homeParticipant?.image_path || homeParticipant?.logo_path),
+      awayTeamLogoUrl: imageUrl(awayParticipant?.image_path || awayParticipant?.logo_path),
       startTime: isoTimestamp(fixture.starting_at),
       status: "live",
       homeScore,
@@ -648,9 +674,16 @@ function normalizeSportmonksCricketFixture(fixture: any, providerId: string): No
     providerId,
     providerEventId: String(fixture.id),
     sport: { name: "Cricket", slug: "cricket", icon: "🏏" },
-    league: { name: leagueName, slug: slugify(leagueName), country: league?.country?.name || league?.country || undefined },
+    league: {
+      name: leagueName,
+      slug: slugify(leagueName),
+      country: league?.country?.name || league?.country || undefined,
+      logoUrl: imageUrl(league?.image_path || league?.logo_path),
+    },
     homeTeam: homeTeam.name,
     awayTeam: awayTeam.name,
+    homeTeamLogoUrl: imageUrl(homeTeam.image_path || homeTeam.logo_path),
+    awayTeamLogoUrl: imageUrl(awayTeam.image_path || awayTeam.logo_path),
     startTime,
     status,
     homeScore,
@@ -705,8 +738,8 @@ const openLigaMatchSchema = z.object({
   leagueShortcut: z.string().nullish(),
   lastUpdateDateTime: z.string().nullish(),
   matchIsFinished: z.boolean().nullish(),
-  team1: z.object({ teamName: z.string().min(1) }),
-  team2: z.object({ teamName: z.string().min(1) }),
+  team1: z.object({ teamName: z.string().min(1), teamIconUrl: z.string().nullish() }),
+  team2: z.object({ teamName: z.string().min(1), teamIconUrl: z.string().nullish() }),
   matchResults: z.array(z.object({
     pointsTeam1: z.number(),
     pointsTeam2: z.number(),
@@ -751,6 +784,8 @@ async function fetchOpenLigaDb(config: SportsProviderConfig) {
       league: { name: leagueName, slug: slugify(leagueName), country: "Europe" },
       homeTeam: match.team1.teamName,
       awayTeam: match.team2.teamName,
+      homeTeamLogoUrl: imageUrl(match.team1.teamIconUrl),
+      awayTeamLogoUrl: imageUrl(match.team2.teamIconUrl),
       startTime,
       status,
       homeScore,

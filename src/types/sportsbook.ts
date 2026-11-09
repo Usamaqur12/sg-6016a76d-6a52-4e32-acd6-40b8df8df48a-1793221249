@@ -20,8 +20,11 @@ export interface SportsbookEvent {
   awayTeam: string;
   league: string;
   leagueCountryCode?: string;
+  leagueLogoUrl?: string;
   homeCountryCode?: string;
   awayCountryCode?: string;
+  homeTeamLogoUrl?: string;
+  awayTeamLogoUrl?: string;
   startTime: string;
   startTimeIso: string;
   isLive: boolean;

@@ -72,6 +72,9 @@ function mapSportsbookEvent(event: RawSportsbookEvent): SportsbookEvent {
   const providerScore = metadata.providerScore && typeof metadata.providerScore === "object" && !Array.isArray(metadata.providerScore)
     ? metadata.providerScore as Record<string, unknown>
     : null;
+  const providerVisuals = metadata.providerVisuals && typeof metadata.providerVisuals === "object" && !Array.isArray(metadata.providerVisuals)
+    ? metadata.providerVisuals as Record<string, unknown>
+    : null;
   const eventLeagueCountryCode = leagueCountryCode(event.leagues?.name, event.leagues?.country);
 
   return {
@@ -82,8 +85,11 @@ function mapSportsbookEvent(event: RawSportsbookEvent): SportsbookEvent {
     awayTeam: event.away_team,
     league: event.leagues?.name || "Imported fixtures",
     leagueCountryCode: eventLeagueCountryCode,
+    leagueLogoUrl: typeof providerVisuals?.leagueLogoUrl === "string" ? providerVisuals.leagueLogoUrl : undefined,
     homeCountryCode: teamCountryCode(event.home_team, eventLeagueCountryCode),
     awayCountryCode: teamCountryCode(event.away_team, eventLeagueCountryCode),
+    homeTeamLogoUrl: typeof providerVisuals?.homeTeamLogoUrl === "string" ? providerVisuals.homeTeamLogoUrl : undefined,
+    awayTeamLogoUrl: typeof providerVisuals?.awayTeamLogoUrl === "string" ? providerVisuals.awayTeamLogoUrl : undefined,
     startTime: formatKickoff(event.start_time),
     startTimeIso: event.start_time,
     isLive,

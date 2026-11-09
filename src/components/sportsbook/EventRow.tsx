@@ -1,6 +1,7 @@
 import { Star, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CountryFlag } from "@/components/ui/CountryFlag";
+import { SportsEntityBadge } from "@/components/ui/SportsEntityBadge";
 import { cn } from "@/lib/utils";
 import type { SportsbookOutcome } from "@/types/sportsbook";
 
@@ -11,8 +12,11 @@ interface EventRowProps {
     awayTeam: string;
     league?: string;
     leagueCountryCode?: string;
+    leagueLogoUrl?: string;
     homeCountryCode?: string;
     awayCountryCode?: string;
+    homeTeamLogoUrl?: string;
+    awayTeamLogoUrl?: string;
     startTime: string;
     isLive?: boolean;
     liveScore?: { home: number; away: number; homeDisplay?: string; awayDisplay?: string };
@@ -71,6 +75,7 @@ export function EventRow({
         {/* Teams + League */}
         <div className="min-w-0">
           <div className="mb-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-subtle-foreground">
+            <SportsEntityBadge imageUrl={event.leagueLogoUrl} label={event.league || "League"} className="h-4 w-4 text-[6px]" />
             <CountryFlag code={event.leagueCountryCode} label={event.league} className="h-3 w-4" />
             <span className="truncate">{event.league}</span>
           </div>
@@ -88,6 +93,7 @@ export function EventRow({
                 <div className="space-y-0.5">
                   <div className="flex items-center justify-between text-xs font-semibold">
                     <span className="flex min-w-0 items-center gap-1.5">
+                      <SportsEntityBadge imageUrl={event.homeTeamLogoUrl} label={event.homeTeam} />
                       <CountryFlag code={event.homeCountryCode} label={event.homeTeam} className="h-3 w-4" />
                       <span className="truncate">{event.homeTeam}</span>
                     </span>
@@ -95,6 +101,7 @@ export function EventRow({
                   </div>
                   <div className="flex items-center justify-between text-xs font-semibold">
                     <span className="flex min-w-0 items-center gap-1.5">
+                      <SportsEntityBadge imageUrl={event.awayTeamLogoUrl} label={event.awayTeam} />
                       <CountryFlag code={event.awayCountryCode} label={event.awayTeam} className="h-3 w-4" />
                       <span className="truncate">{event.awayTeam}</span>
                     </span>
@@ -104,10 +111,12 @@ export function EventRow({
               ) : (
                 <div className="space-y-0.5">
                   <p className="flex min-w-0 items-center gap-1.5 text-xs font-semibold">
+                    <SportsEntityBadge imageUrl={event.homeTeamLogoUrl} label={event.homeTeam} />
                     <CountryFlag code={event.homeCountryCode} label={event.homeTeam} className="h-3 w-4" />
                     <span className="truncate">{event.homeTeam}</span>
                   </p>
                   <p className="flex min-w-0 items-center gap-1.5 text-xs font-semibold">
+                    <SportsEntityBadge imageUrl={event.awayTeamLogoUrl} label={event.awayTeam} />
                     <CountryFlag code={event.awayCountryCode} label={event.awayTeam} className="h-3 w-4" />
                     <span className="truncate">{event.awayTeam}</span>
                   </p>

@@ -234,6 +234,14 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
           : {}),
         [event.providerId]: event.providerEventId,
       },
+      providerVisuals: {
+        ...(existingMetadata.providerVisuals && typeof existingMetadata.providerVisuals === "object"
+          ? existingMetadata.providerVisuals as Record<string, unknown>
+          : {}),
+        ...(event.league.logoUrl ? { leagueLogoUrl: event.league.logoUrl } : {}),
+        ...(event.homeTeamLogoUrl ? { homeTeamLogoUrl: event.homeTeamLogoUrl } : {}),
+        ...(event.awayTeamLogoUrl ? { awayTeamLogoUrl: event.awayTeamLogoUrl } : {}),
+      },
       ...(event.scoreLabels ? {
         providerScore: {
           home: event.scoreLabels.home,
