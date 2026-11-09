@@ -215,11 +215,20 @@ export default function SportsProvidersPage() {
         body: JSON.stringify({ id: provider.id, ...changes }),
       });
       await loadProviders();
+      return true;
     } catch (error) {
       toast({ title: "Provider update failed", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
+      return false;
     } finally {
       setWorkingId(null);
     }
+  }
+
+  async function enableFeaturedMarkets(provider: ProviderRecord) {
+    const updated = await updateProvider(provider, {
+      settings: { ...provider.settings, markets: "h2h,spreads,totals" },
+    });
+    if (updated) toast({ title: "Cricket markets enabled", description: "Use Sync now to import available match result, handicap and totals prices." });
   }
 
   async function deleteProvider(id: string) {
@@ -321,7 +330,7 @@ export default function SportsProvidersPage() {
                       <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{provider.name}</h3><Badge variant={provider.status === "healthy" ? "outline" : provider.status === "error" ? "destructive" : "secondary"}>{provider.status.replace(/_/g, " ")}</Badge>{provider.is_demo && <Badge variant="secondary">Preview</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">{providerLabels[provider.provider_type]}{provider.settings?.sportKey ? ` · ${provider.settings.sportKey === "cricket_active" ? "all active cricket" : provider.settings.sportKey === "verified_results_active" ? "verified scores & results" : provider.settings.sportKey}` : provider.settings?.sport ? ` · ${provider.settings.sport}` : ""} · every {provider.sync_interval_seconds}s · {provider.last_event_count || 0} last events</p>{provider.last_success_at && <p className="mt-1 text-xs text-muted-foreground">Last success: {new Date(provider.last_success_at).toLocaleString()}</p>}{provider.last_error && <p className="mt-1 text-xs text-destructive">{provider.last_error}</p>}</div>
                       <div className="flex items-center gap-2"><Switch checked={provider.is_enabled} onCheckedChange={(checked) => void updateProvider(provider, { isEnabled: checked })} disabled={workingId === provider.id} /><Button size="icon" variant="ghost" className="text-destructive" onClick={() => void deleteProvider(provider.id)} disabled={workingId === provider.id} aria-label="Delete provider"><Trash2 className="h-4 w-4" /></Button></div>
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void runAction(provider, "test")} disabled={workingId === provider.id}><Activity className="mr-2 h-4 w-4" />Test connection</Button><Button size="sm" onClick={() => void runAction(provider, "sync")} disabled={!provider.is_enabled || workingId === provider.id}><Save className="mr-2 h-4 w-4" />Sync now</Button>{provider.provider_type === "the_odds_api" && provider.settings?.sportKey !== "verified_results_active" && !providers.some((item) => item.provider_type === "the_odds_api" && item.settings?.sportKey === "verified_results_active") && <Button size="sm" variant="outline" onClick={() => void addVerifiedResultsPack(provider)} disabled={workingId !== null}><Plus className="mr-2 h-4 w-4" />{workingId === `verified-${provider.id}` ? "Adding verified sports…" : "Add verified sports"}</Button>}{provider.provider_type === "the_odds_api" && provider.settings?.sportKey !== "cricket_active" && !providers.some((item) => item.provider_type === "the_odds_api" && item.settings?.sportKey === "cricket_active") && <Button size="sm" variant="outline" onClick={() => void addCricketOdds(provider)} disabled={workingId !== null}><Plus className="mr-2 h-4 w-4" />{workingId === `cricket-${provider.id}` ? "Adding cricket…" : "Add cricket odds"}</Button>}</div>
+                    <div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void runAction(provider, "test")} disabled={workingId === provider.id}><Activity className="mr-2 h-4 w-4" />Test connection</Button><Button size="sm" onClick={() => void runAction(provider, "sync")} disabled={!provider.is_enabled || workingId === provider.id}><Save className="mr-2 h-4 w-4" />Sync now</Button>{provider.provider_type === "the_odds_api" && provider.settings?.sportKey === "cricket_active" && provider.settings?.markets !== "h2h,spreads,totals" && <Button size="sm" variant="outline" onClick={() => void enableFeaturedMarkets(provider)} disabled={workingId !== null}><Plus className="mr-2 h-4 w-4" />Enable 3 markets</Button>}{provider.provider_type === "the_odds_api" && provider.settings?.sportKey !== "verified_results_active" && !providers.some((item) => item.provider_type === "the_odds_api" && item.settings?.sportKey === "verified_results_active") && <Button size="sm" variant="outline" onClick={() => void addVerifiedResultsPack(provider)} disabled={workingId !== null}><Plus className="mr-2 h-4 w-4" />{workingId === `verified-${provider.id}` ? "Adding verified sports…" : "Add verified sports"}</Button>}{provider.provider_type === "the_odds_api" && provider.settings?.sportKey !== "cricket_active" && !providers.some((item) => item.provider_type === "the_odds_api" && item.settings?.sportKey === "cricket_active") && <Button size="sm" variant="outline" onClick={() => void addCricketOdds(provider)} disabled={workingId !== null}><Plus className="mr-2 h-4 w-4" />{workingId === `cricket-${provider.id}` ? "Adding cricket…" : "Add cricket odds"}</Button>}</div>
                   </div>
                 ))}
               </CardContent>

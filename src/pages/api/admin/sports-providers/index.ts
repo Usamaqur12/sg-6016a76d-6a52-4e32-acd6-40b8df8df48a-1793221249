@@ -151,7 +151,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === "PUT") {
     try {
-      const { id, isEnabled, apiKey } = req.body;
+      const { id, isEnabled, apiKey, settings } = req.body;
 
       if (!id) {
         return res.status(400).json({ error: "Provider ID is required" });
@@ -163,6 +163,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         updateData.status = isEnabled ? "not_tested" : "disabled";
       }
       if (apiKey) updateData.encrypted_api_key = encryptProviderSecret(String(apiKey));
+      if (settings !== undefined) {
+        const parsedSettings = z.record(z.string(), z.unknown()).safeParse(settings);
+        if (!parsedSettings.success) return res.status(400).json({ error: "Invalid provider settings" });
+        updateData.settings = parsedSettings.data;
+        updateData.status = "not_tested";
+      }
 
       const { data, error } = await supabaseAdmin
         .from("sports_feed_providers")
