@@ -4,10 +4,6 @@ import { hasAccess } from "@/lib/adminRoles";
 import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
 import { encryptProviderSecret } from "@/lib/server/providerSecrets";
 import { providerTypes } from "@/lib/server/sportsProviders";
-import {
-  syncSportsProvider,
-  type ManagedSportsProvider,
-} from "@/lib/server/syncSportsProvider";
 import { z } from "zod";
 
 const THE_SPORTS_DB_FREE_URL = "https://www.thesportsdb.com/api/v1/json/123/searchteams.php?t=Arsenal";
@@ -137,30 +133,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (error) throw error;
 
-      let syncResult: Awaited<ReturnType<typeof syncSportsProvider>> | null = null;
-      let syncError: string | null = null;
-
-      if (value.isEnabled) {
-        try {
-          syncResult = await syncSportsProvider(data as ManagedSportsProvider, "sync");
-        } catch (syncFailure) {
-          syncError = errorMessage(syncFailure);
-        }
-      }
-
-      const imported = syncResult?.ingested || 0;
-      const message = syncResult
-        ? `Sports provider saved and ${imported} event${imported === 1 ? "" : "s"} imported.`
-        : syncError
-          ? `Sports provider saved, but first sync failed: ${syncError}`
-          : "Sports provider saved. Enable it to import events.";
-
       return res.status(201).json({
         provider: sanitizeProvider(data),
         normalizedFromFreeV1,
-        sync: syncResult,
-        syncError,
-        message,
+        message: value.isEnabled
+          ? "Sports provider saved. Use Sync now to import events."
+          : "Sports provider saved. Enable it, then use Sync now to import events.",
       });
     } catch (error: unknown) {
       const message = errorMessage(error);
@@ -195,20 +173,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (error) throw error;
 
-      let syncResult: Awaited<ReturnType<typeof syncSportsProvider>> | null = null;
-      let syncError: string | null = null;
-      if (Boolean(isEnabled)) {
-        try {
-          syncResult = await syncSportsProvider(data as ManagedSportsProvider, "sync");
-        } catch (syncFailure) {
-          syncError = errorMessage(syncFailure);
-        }
-      }
-
       return res.status(200).json({
         provider: sanitizeProvider(data),
-        sync: syncResult,
-        syncError,
+        message: Boolean(isEnabled)
+          ? "Provider enabled. Use Sync now to import events."
+          : "Provider updated.",
       });
     } catch (error: unknown) {
       console.error("Failed to update provider:", error);

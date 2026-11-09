@@ -68,16 +68,28 @@ export default function SportsProvidersPage() {
 
   useEffect(() => { void loadProviders(); }, []);
 
-  async function adminFetch(url: string, init?: RequestInit) {
+  async function adminFetch(url: string, init?: RequestInit, timeoutMs = 20_000) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error("Admin session expired");
-    const response = await fetch(url, {
-      ...init,
-      headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}`, ...(init?.headers || {}) },
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.details || body.error || "Provider request failed");
-    return body;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+        headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}`, ...(init?.headers || {}) },
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.details || body.error || "Provider request failed");
+      return body;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error("Provider request timed out. Refresh the list before trying again.");
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   async function loadProviders() {
@@ -228,7 +240,7 @@ export default function SportsProvidersPage() {
       const body: ProviderActionResult = await adminFetch(`/api/admin/sports-providers/${provider.id}/action`, {
         method: "POST",
         body: JSON.stringify({ action }),
-      });
+      }, 120_000);
       setResult(body);
       toast({ title: action === "sync" ? "Provider synced" : "Connection successful", description: `${body.eventCount} event update(s) received.` });
       await loadProviders();
