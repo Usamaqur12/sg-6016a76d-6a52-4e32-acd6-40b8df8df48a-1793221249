@@ -207,6 +207,23 @@ const oddsApiScoreEventSchema = z.object({
   last_update: z.string().nullish(),
 }).passthrough();
 
+// Major competitions that The Odds API currently marks as supporting
+// Scores & Results in its official sports coverage table.
+const verifiedResultSportKeys = [
+  "americanfootball_nfl",
+  "baseball_mlb",
+  "basketball_nba",
+  "basketball_wnba",
+  "basketball_ncaab",
+  "icehockey_nhl",
+  "soccer_epl",
+  "soccer_uefa_champs_league",
+  "soccer_spain_la_liga",
+  "soccer_germany_bundesliga",
+  "soccer_italy_serie_a",
+  "soccer_france_ligue_one",
+] as const;
+
 function cricketScoreNumber(value: string | null | undefined) {
   if (!value) return null;
   const match = value.match(/\d+/);
@@ -253,21 +270,31 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
   }
 
   let sportKeys = [sportKey];
-  if (sportKey === "cricket_active") {
+  if (["cricket_active", "verified_results_active"].includes(sportKey)) {
     const sportsUrl = new URL("https://api.the-odds-api.com/v4/sports/");
     sportsUrl.searchParams.set("apiKey", apiKey);
     const sportsBody = await fetchJson(sportsUrl.toString());
-    const activeCricket = (Array.isArray(sportsBody) ? sportsBody : [])
+    const activeSports = (Array.isArray(sportsBody) ? sportsBody : [])
       .map((value) => oddsApiSportSchema.safeParse(value))
       .filter((result) => result.success)
       .map((result) => result.data)
-      .filter((sport) => sport.active
-        && !sport.has_outrights
-        && (sport.group.toLowerCase() === "cricket" || sport.key.startsWith("cricket_")))
-      .sort((left, right) => left.title.localeCompare(right.title))
-      .slice(0, maxCompetitions);
+      .filter((sport) => sport.active && !sport.has_outrights);
+    const excludedSportKeys = new Set(Array.isArray(settings.excludedSportKeys)
+      ? settings.excludedSportKeys.filter((value): value is string => typeof value === "string")
+      : []);
 
-    sportKeys = activeCricket.map((sport) => sport.key);
+    if (sportKey === "cricket_active") {
+      sportKeys = activeSports
+        .filter((sport) => sport.group.toLowerCase() === "cricket" || sport.key.startsWith("cricket_"))
+        .sort((left, right) => left.title.localeCompare(right.title))
+        .slice(0, maxCompetitions)
+        .map((sport) => sport.key);
+    } else {
+      const activeKeys = new Set(activeSports.map((sport) => sport.key));
+      sportKeys = verifiedResultSportKeys
+        .filter((key) => activeKeys.has(key) && !excludedSportKeys.has(key))
+        .slice(0, maxCompetitions);
+    }
     if (sportKeys.length === 0) return [];
   }
 
