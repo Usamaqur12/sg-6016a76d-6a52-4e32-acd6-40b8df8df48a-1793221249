@@ -18,7 +18,7 @@ interface ProviderRecord {
   id: string;
   name: string;
   provider_type: ProviderType;
-  settings: { leagueId?: string; leagueShortcut?: string; sport?: string; latestOnly?: boolean; sportKey?: string; regions?: string; bookmakerKey?: string; maxCompetitions?: number; excludedSportKeys?: string[] };
+  settings: { leagueId?: string; leagueShortcut?: string; sport?: string; latestOnly?: boolean; sportKey?: string; regions?: string; bookmakerKey?: string; markets?: string; maxCompetitions?: number; excludedSportKeys?: string[] };
   is_enabled: boolean;
   is_demo: boolean;
   priority: number;
@@ -43,7 +43,7 @@ const providerLabels: Record<ProviderType, string> = {
   openligadb: "OpenLigaDB Live Scores (no key)",
   thesportsdb_demo: "TheSportsDB Free v1 Schedule (key 123)",
   thesportsdb_live: "TheSportsDB V2 Live Scores",
-  sportmonks: "Sportmonks Football Live Scores",
+  sportmonks: "Sportmonks Live Data (Football / Cricket)",
 };
 
 export default function SportsProvidersPage() {
@@ -63,6 +63,7 @@ export default function SportsProvidersPage() {
   const [oddsSportKey, setOddsSportKey] = useState("soccer_epl");
   const [oddsRegions, setOddsRegions] = useState("eu");
   const [oddsBookmakerKey, setOddsBookmakerKey] = useState("onexbet");
+  const [oddsMarkets, setOddsMarkets] = useState("h2h");
   const [syncInterval, setSyncInterval] = useState("3600");
   const [enabled, setEnabled] = useState(true);
 
@@ -113,6 +114,7 @@ export default function SportsProvidersPage() {
             sportKey: oddsSportKey.trim() || "soccer_epl",
             regions: oddsRegions.trim().toLowerCase() || "eu",
             bookmakerKey: oddsBookmakerKey.trim().toLowerCase() || "onexbet",
+            markets: oddsMarkets.trim().toLowerCase() || "h2h",
           }
         : {
             leagueId: leagueId.trim() || undefined,
@@ -154,6 +156,7 @@ export default function SportsProvidersPage() {
             sportKey: "cricket_active",
             regions: provider.settings?.regions || "uk",
             bookmakerKey: provider.settings?.bookmakerKey || "onexbet",
+            markets: "h2h,spreads,totals",
             maxCompetitions: 8,
           },
           isEnabled: true,
@@ -271,7 +274,7 @@ export default function SportsProvidersPage() {
             <CardHeader><CardTitle>Add provider</CardTitle><CardDescription>Add the connection here; secrets are never returned after saving.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2"><Label htmlFor="provider-name">Display name</Label><Input id="provider-name" value={name} onChange={(event) => setName(event.target.value)} /></div>
-              <div className="space-y-2"><Label>Provider</Label><Select value={providerType} onValueChange={(value) => setProviderType(value as ProviderType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(providerLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Provider</Label><Select value={providerType} onValueChange={(value) => { const next = value as ProviderType; setProviderType(next); if (next === "sportmonks") { setSport("cricket"); setLeagueId(""); setName("Sportmonks Cricket Live"); setSyncInterval("60"); } }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(providerLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
               {providerType === "thesportsdb_demo" && (
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
                   <p className="font-medium text-foreground">Supplied free API is ready</p>
@@ -285,15 +288,22 @@ export default function SportsProvidersPage() {
                   <p className="mt-1">Imports upcoming events plus Home/Draw/Away decimal odds. Keep the API key private and monitor your provider request quota.</p>
                 </div>
               )}
+              {providerType === "sportmonks" && sport.toLowerCase() === "cricket" && (
+                <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">Commercial cricket score feed</p>
+                  <p className="mt-1">Imports runs, wickets, overs, ball-by-ball incidents and official winner data. It reconciles with The Odds API fixtures and pauses markets on wickets or match interruptions.</p>
+                </div>
+              )}
               {!['thesportsdb_demo', 'openligadb'].includes(providerType) && <div className="space-y-2"><Label htmlFor="provider-key">{providerType === "the_odds_api" ? "The Odds API key" : "API key/token or TheSportsDB v1 cURL URL"}</Label><div className="flex gap-2"><Input id="provider-key" type={showKey ? "text" : "password"} autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /><Button type="button" size="icon" variant="outline" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "Hide API key" : "Show API key"}>{showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button></div></div>}
               {providerType === "the_odds_api" ? (
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="space-y-2"><Label htmlFor="odds-sport-key">Sport key</Label><Input id="odds-sport-key" value={oddsSportKey} onChange={(event) => setOddsSportKey(event.target.value)} placeholder="soccer_epl" /><div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => { setOddsSportKey("verified_results_active"); setName("The Odds API Verified Results"); setSyncInterval("3600"); }}>Verified results pack</Button><Button type="button" size="sm" variant="outline" onClick={() => { setOddsSportKey("cricket_active"); setName("The Odds API Cricket"); setSyncInterval("3600"); }}>Cricket odds</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setOddsSportKey("soccer_epl"); setName("The Odds API EPL"); }}>EPL</Button></div></div>
                   <div className="space-y-2"><Label htmlFor="odds-regions">Region</Label><Input id="odds-regions" value={oddsRegions} onChange={(event) => setOddsRegions(event.target.value)} placeholder="eu" /></div>
                   <div className="space-y-2"><Label htmlFor="odds-bookmaker">Preferred bookmaker</Label><Input id="odds-bookmaker" value={oddsBookmakerKey} onChange={(event) => setOddsBookmakerKey(event.target.value)} placeholder="onexbet" /></div>
+                  <div className="space-y-2"><Label htmlFor="odds-markets">Markets</Label><Input id="odds-markets" value={oddsMarkets} onChange={(event) => setOddsMarkets(event.target.value)} placeholder="h2h,spreads,totals" /><p className="text-[11px] text-muted-foreground">Each region × market consumes provider quota.</p></div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">{providerType === "openligadb" ? <div className="space-y-2"><Label htmlFor="league-shortcut">League shortcut</Label><Input id="league-shortcut" value={leagueShortcut} onChange={(event) => setLeagueShortcut(event.target.value)} placeholder="bl1" /></div> : <div className="space-y-2"><Label htmlFor="league-id">League ID</Label><Input id="league-id" value={leagueId} onChange={(event) => setLeagueId(event.target.value)} placeholder="4328" /></div>}<div className="space-y-2"><Label htmlFor="sport-code">Sport</Label><Input id="sport-code" value={sport} onChange={(event) => setSport(event.target.value)} placeholder="soccer" /></div></div>
+                <div className="grid grid-cols-2 gap-3">{providerType === "openligadb" ? <div className="space-y-2"><Label htmlFor="league-shortcut">League shortcut</Label><Input id="league-shortcut" value={leagueShortcut} onChange={(event) => setLeagueShortcut(event.target.value)} placeholder="bl1" /></div> : <div className="space-y-2"><Label htmlFor="league-id">League ID (optional)</Label><Input id="league-id" value={leagueId} onChange={(event) => setLeagueId(event.target.value)} placeholder={providerType === "sportmonks" ? "All covered leagues" : "4328"} /></div>}<div className="space-y-2"><Label htmlFor="sport-code">Sport</Label><Input id="sport-code" value={sport} onChange={(event) => setSport(event.target.value)} placeholder={providerType === "sportmonks" ? "cricket" : "soccer"} /></div></div>
               )}
               <div className="space-y-2"><Label htmlFor="sync-interval">Sync interval (seconds)</Label><Input id="sync-interval" type="number" min="5" max="3600" value={syncInterval} onChange={(event) => setSyncInterval(event.target.value)} /></div>
               <div className="flex items-center justify-between rounded border border-border p-3"><div><div className="text-sm font-medium">Enable after saving</div><div className="text-xs text-muted-foreground">Test before using scheduled sync.</div></div><Switch checked={enabled} onCheckedChange={setEnabled} /></div>
@@ -308,7 +318,7 @@ export default function SportsProvidersPage() {
                 {providers.length === 0 ? <p className="py-10 text-center text-sm text-muted-foreground">{loading ? "Loading providers…" : "No provider configured."}</p> : providers.map((provider) => (
                   <div key={provider.id} className="rounded-lg border border-border p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{provider.name}</h3><Badge variant={provider.status === "healthy" ? "outline" : provider.status === "error" ? "destructive" : "secondary"}>{provider.status.replace(/_/g, " ")}</Badge>{provider.is_demo && <Badge variant="secondary">Preview</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">{providerLabels[provider.provider_type]}{provider.settings?.sportKey ? ` · ${provider.settings.sportKey === "cricket_active" ? "all active cricket" : provider.settings.sportKey === "verified_results_active" ? "verified scores & results" : provider.settings.sportKey}` : ""} · every {provider.sync_interval_seconds}s · {provider.last_event_count || 0} last events</p>{provider.last_success_at && <p className="mt-1 text-xs text-muted-foreground">Last success: {new Date(provider.last_success_at).toLocaleString()}</p>}{provider.last_error && <p className="mt-1 text-xs text-destructive">{provider.last_error}</p>}</div>
+                      <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{provider.name}</h3><Badge variant={provider.status === "healthy" ? "outline" : provider.status === "error" ? "destructive" : "secondary"}>{provider.status.replace(/_/g, " ")}</Badge>{provider.is_demo && <Badge variant="secondary">Preview</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">{providerLabels[provider.provider_type]}{provider.settings?.sportKey ? ` · ${provider.settings.sportKey === "cricket_active" ? "all active cricket" : provider.settings.sportKey === "verified_results_active" ? "verified scores & results" : provider.settings.sportKey}` : provider.settings?.sport ? ` · ${provider.settings.sport}` : ""} · every {provider.sync_interval_seconds}s · {provider.last_event_count || 0} last events</p>{provider.last_success_at && <p className="mt-1 text-xs text-muted-foreground">Last success: {new Date(provider.last_success_at).toLocaleString()}</p>}{provider.last_error && <p className="mt-1 text-xs text-destructive">{provider.last_error}</p>}</div>
                       <div className="flex items-center gap-2"><Switch checked={provider.is_enabled} onCheckedChange={(checked) => void updateProvider(provider, { isEnabled: checked })} disabled={workingId === provider.id} /><Button size="icon" variant="ghost" className="text-destructive" onClick={() => void deleteProvider(provider.id)} disabled={workingId === provider.id} aria-label="Delete provider"><Trash2 className="h-4 w-4" /></Button></div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void runAction(provider, "test")} disabled={workingId === provider.id}><Activity className="mr-2 h-4 w-4" />Test connection</Button><Button size="sm" onClick={() => void runAction(provider, "sync")} disabled={!provider.is_enabled || workingId === provider.id}><Save className="mr-2 h-4 w-4" />Sync now</Button>{provider.provider_type === "the_odds_api" && provider.settings?.sportKey !== "verified_results_active" && !providers.some((item) => item.provider_type === "the_odds_api" && item.settings?.sportKey === "verified_results_active") && <Button size="sm" variant="outline" onClick={() => void addVerifiedResultsPack(provider)} disabled={workingId !== null}><Plus className="mr-2 h-4 w-4" />{workingId === `verified-${provider.id}` ? "Adding verified sports…" : "Add verified sports"}</Button>}{provider.provider_type === "the_odds_api" && provider.settings?.sportKey !== "cricket_active" && !providers.some((item) => item.provider_type === "the_odds_api" && item.settings?.sportKey === "cricket_active") && <Button size="sm" variant="outline" onClick={() => void addCricketOdds(provider)} disabled={workingId !== null}><Plus className="mr-2 h-4 w-4" />{workingId === `cricket-${provider.id}` ? "Adding cricket…" : "Add cricket odds"}</Button>}</div>

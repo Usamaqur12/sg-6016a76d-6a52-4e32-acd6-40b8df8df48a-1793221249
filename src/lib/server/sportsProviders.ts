@@ -28,6 +28,17 @@ export interface NormalizedSportsEvent {
   scoreLabels?: { home: string | null; away: string | null };
   scoreUpdatedAt?: string | null;
   liveMinute?: number | null;
+  suspendMarkets?: boolean;
+  settlementWinner?: "Home" | "Away" | "Draw" | null;
+  incidents?: Array<{
+    providerIncidentId: string;
+    type: string;
+    sequence?: number | null;
+    teamSide?: "home" | "away" | "neutral";
+    homeScore?: number | null;
+    awayScore?: number | null;
+    description?: string | null;
+  }>;
   markets: Array<{
     name: string;
     type: string;
@@ -114,8 +125,8 @@ function normalizeSportsDbEvent(rawValue: unknown, providerId: string): Normaliz
   };
 }
 
-async function fetchJson(url: string, init?: RequestInit) {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(12_000), cache: "no-store" });
+async function fetchJson(url: string, init?: RequestInit, timeoutMs = 12_000) {
+  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs), cache: "no-store" });
   if (!response.ok) throw new Error(`Provider returned HTTP ${response.status}`);
   return response.json();
 }
@@ -262,6 +273,11 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
   const sportKey = String(settings.sportKey || "soccer_epl").trim();
   const regions = String(settings.regions || "eu").trim().toLowerCase();
   const bookmakerKey = String(settings.bookmakerKey || "onexbet").trim().toLowerCase();
+  const requestedMarkets = String(settings.markets || "h2h")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => ["h2h", "spreads", "totals"].includes(value));
+  const marketKeys = requestedMarkets.length > 0 ? [...new Set(requestedMarkets)] : ["h2h"];
   const maxCompetitions = Math.min(Math.max(Number(settings.maxCompetitions || 8), 1), 20);
 
   if (!/^[a-z0-9_]{3,80}$/i.test(sportKey)) throw new Error("Invalid The Odds API sport key");
@@ -301,7 +317,7 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
   const responses = await Promise.allSettled(sportKeys.map(async (activeSportKey) => {
     const url = new URL(`https://api.the-odds-api.com/v4/sports/${activeSportKey}/odds/`);
     url.searchParams.set("regions", regions);
-    url.searchParams.set("markets", "h2h");
+    url.searchParams.set("markets", marketKeys.join(","));
     url.searchParams.set("oddsFormat", "decimal");
     url.searchParams.set("dateFormat", "iso");
     url.searchParams.set("apiKey", apiKey);
@@ -344,32 +360,77 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
     const scoreEvent = scoresByEventId.get(event.id);
     const preferred = event.bookmakers.find((bookmaker) =>
       bookmaker.key.toLowerCase() === bookmakerKey
-      && bookmaker.markets.some((market) => market.key === "h2h")
+      && bookmaker.markets.some((market) => marketKeys.includes(market.key))
     );
     const bookmaker = preferred || event.bookmakers.find((candidate) =>
-      candidate.markets.some((market) => market.key === "h2h")
+      candidate.markets.some((market) => marketKeys.includes(market.key))
     );
-    const h2h = bookmaker?.markets.find((market) => market.key === "h2h");
-    if (!bookmaker || !h2h) return null;
+    if (!bookmaker) return null;
 
-    const normalizedOutcomes = h2h.outcomes.flatMap((outcome) => {
-      const selection = outcome.name === event.home_team
-        ? "Home"
-        : outcome.name === event.away_team
-          ? "Away"
-          : ["draw", "tie"].includes(outcome.name.toLowerCase())
-            ? "Draw"
-            : null;
-      const value = Number(outcome.price);
-      return selection && Number.isFinite(value) && value > 1
-        ? [{ selection, value, active: true }]
-        : [];
-    });
+    const normalizedMarkets: NormalizedSportsEvent["markets"] = bookmaker.markets.flatMap((market) => {
+      if (!marketKeys.includes(market.key)) return [];
 
-    if (!normalizedOutcomes.some((outcome) => outcome.selection === "Home")
-      || !normalizedOutcomes.some((outcome) => outcome.selection === "Away")) {
-      return null;
-    }
+      if (market.key === "h2h") {
+        const outcomes = market.outcomes.flatMap((outcome) => {
+          const selection = outcome.name === event.home_team
+            ? "Home"
+            : outcome.name === event.away_team
+              ? "Away"
+              : ["draw", "tie"].includes(outcome.name.toLowerCase())
+                ? "Draw"
+                : null;
+          const value = Number(outcome.price);
+          return selection && Number.isFinite(value) && value > 1
+            ? [{ selection, value, active: true }]
+            : [];
+        });
+        return outcomes.some((outcome) => outcome.selection === "Home")
+          && outcomes.some((outcome) => outcome.selection === "Away")
+          ? [{ name: "Match Result", type: "match_result", status: "active" as const, outcomes }]
+          : [];
+      }
+
+      if (market.key === "spreads") {
+        const home = market.outcomes.find((outcome) => outcome.name === event.home_team);
+        const away = market.outcomes.find((outcome) => outcome.name === event.away_team);
+        const line = Number(home?.point);
+        const homePrice = Number(home?.price);
+        const awayPrice = Number(away?.price);
+        if (!home || !away || !Number.isFinite(line) || !Number.isFinite(homePrice) || !Number.isFinite(awayPrice)) return [];
+        return [{
+          name: `Handicap ${line >= 0 ? "+" : ""}${line}`,
+          type: "handicap",
+          line,
+          status: "active" as const,
+          outcomes: [
+            { selection: "Home", value: homePrice, active: homePrice > 1 },
+            { selection: "Away", value: awayPrice, active: awayPrice > 1 },
+          ].filter((outcome) => outcome.active),
+        }];
+      }
+
+      if (market.key === "totals") {
+        const over = market.outcomes.find((outcome) => outcome.name.toLowerCase() === "over");
+        const under = market.outcomes.find((outcome) => outcome.name.toLowerCase() === "under");
+        const line = Number(over?.point ?? under?.point);
+        const overPrice = Number(over?.price);
+        const underPrice = Number(under?.price);
+        if (!over || !under || !Number.isFinite(line) || !Number.isFinite(overPrice) || !Number.isFinite(underPrice)) return [];
+        return [{
+          name: `Total ${line}`,
+          type: "over_under",
+          line,
+          status: "active" as const,
+          outcomes: [
+            { selection: "Over", value: overPrice, active: overPrice > 1 },
+            { selection: "Under", value: underPrice, active: underPrice > 1 },
+          ].filter((outcome) => outcome.active),
+        }];
+      }
+
+      return [];
+    }).filter((market) => market.outcomes.length >= 2);
+    if (normalizedMarkets.length === 0) return null;
 
     const startTime = isoTimestamp(event.commence_time);
     const kickoffMs = new Date(startTime).getTime();
@@ -383,12 +444,12 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
         ? "live" as const
         : "upcoming" as const;
     const normalizedSport = oddsApiSport(event.sport_key, event.sport_title);
-    const oddsFingerprint = normalizedOutcomes
-      .map((outcome) => `${outcome.selection}:${outcome.value}`)
+    const oddsFingerprint = normalizedMarkets
+      .flatMap((market) => market.outcomes.map((outcome) => `${market.type}:${market.line ?? "x"}:${outcome.selection}:${outcome.value}`))
       .join("|");
 
     return {
-      updateId: `${event.id}:${bookmaker.key}:${h2h.last_update || bookmaker.last_update || startTime}:${oddsFingerprint}`,
+      updateId: `${event.id}:${bookmaker.key}:${bookmaker.markets.map((market) => market.last_update || "").sort().at(-1) || bookmaker.last_update || startTime}:${oddsFingerprint}`,
       providerId: config.id,
       providerEventId: event.id,
       sport: normalizedSport,
@@ -406,12 +467,7 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
       scoreLabels: hasProviderScore ? { home: homeScoreLabel, away: awayScoreLabel } : undefined,
       scoreUpdatedAt: scoreEvent?.last_update || null,
       liveMinute: null,
-      markets: [{
-        name: "Match Result",
-        type: "match_result",
-        status: "active",
-        outcomes: normalizedOutcomes,
-      }],
+      markets: normalizedMarkets,
     };
   }).filter(Boolean) as NormalizedSportsEvent[];
 
@@ -465,6 +521,180 @@ async function fetchSportmonks(config: SportsProviderConfig, apiKey: string | nu
       markets: [],
     };
   }).filter(Boolean) as NormalizedSportsEvent[];
+}
+
+function relationArray(value: unknown): any[] {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object" && Array.isArray((value as any).data)) return (value as any).data;
+  return [];
+}
+
+function relationObject(value: unknown): any | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = (value as any).data;
+  if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) return candidate;
+  return value;
+}
+
+function cricketStatus(value: unknown): NormalizedSportsEvent["status"] {
+  const status = String(value || "").trim().toLowerCase();
+  if (["finished", "complete", "completed"].includes(status)) return "finished";
+  if (["postp.", "postponed", "delayed"].includes(status)) return "postponed";
+  if (["cancl.", "cancelled", "canceled", "aban.", "abandoned", "no result"].includes(status)) return "cancelled";
+  if (["ns", "not started", "scheduled"].includes(status)) return "upcoming";
+  return "live";
+}
+
+function cricketRunRows(fixture: any) {
+  return relationArray(fixture?.runs).sort((left, right) => {
+    const inningDifference = Number(left?.inning || 0) - Number(right?.inning || 0);
+    if (inningDifference !== 0) return inningDifference;
+    return Number(left?.id || 0) - Number(right?.id || 0);
+  });
+}
+
+function latestRunForTeam(rows: any[], teamId: unknown) {
+  return rows.filter((row) => String(row?.team_id) === String(teamId)).at(-1) || null;
+}
+
+function cricketRunLabel(row: any) {
+  if (!row) return null;
+  const runs = score(row.score ?? row.runs);
+  const wickets = score(row.wickets ?? row.wickets_out);
+  const overs = row.overs == null ? null : String(row.overs);
+  if (runs === null) return null;
+  return `${runs}/${wickets ?? 0}${overs ? ` (${overs} ov)` : ""}`;
+}
+
+function cricketBallSequence(ball: any) {
+  const value = String(ball?.ball ?? ball?.over_ball ?? ball?.overs ?? "").trim();
+  const match = value.match(/^(\d+)(?:\.(\d+))?$/);
+  if (match) return Number(match[1]) * 6 + Number(match[2] || 0);
+  const fallback = Number(ball?.id);
+  return Number.isFinite(fallback) ? Math.max(0, Math.trunc(fallback)) : null;
+}
+
+function cricketBallDescription(ball: any) {
+  const result = relationObject(ball?.score)?.name
+    || relationObject(ball?.result)?.name
+    || ball?.result
+    || ball?.event
+    || ball?.type
+    || "Ball update";
+  const over = ball?.ball ?? ball?.over_ball ?? ball?.overs;
+  return `${over != null ? `Over ${over}: ` : ""}${String(result)}`.slice(0, 500);
+}
+
+function cricketIncidentType(ball: any) {
+  const description = cricketBallDescription(ball).toLowerCase();
+  if (ball?.wicket || ball?.is_wicket || /\b(out|wicket|bowled|lbw|stump|run out|catch out|hit wicket)\b/.test(description)) return "wicket";
+  if (/\bsix\b|\b6 runs?\b/.test(description)) return "six";
+  if (/\bfour\b|\b4 runs?\b/.test(description)) return "four";
+  if (/wide|no ball|bye|leg bye/.test(description)) return "extra";
+  return "ball";
+}
+
+function cricketIncidents(fixture: any, homeTeamId: unknown, awayTeamId: unknown, homeScore: number | null, awayScore: number | null) {
+  return relationArray(fixture?.balls).slice(-180).flatMap((ball, index) => {
+    const providerIncidentId = String(ball?.id || `${fixture?.id}:${ball?.inning || "x"}:${ball?.ball || ball?.over_ball || index}`);
+    if (!providerIncidentId) return [];
+    const teamId = ball?.team_id ?? ball?.batting_team_id;
+    const teamSide = String(teamId) === String(homeTeamId)
+      ? "home" as const
+      : String(teamId) === String(awayTeamId)
+        ? "away" as const
+        : "neutral" as const;
+    return [{
+      providerIncidentId,
+      type: cricketIncidentType(ball),
+      sequence: cricketBallSequence(ball),
+      teamSide,
+      homeScore,
+      awayScore,
+      description: cricketBallDescription(ball),
+    }];
+  });
+}
+
+function normalizeSportmonksCricketFixture(fixture: any, providerId: string): NormalizedSportsEvent | null {
+  const homeTeam = relationObject(fixture?.localteam);
+  const awayTeam = relationObject(fixture?.visitorteam);
+  const league = relationObject(fixture?.league);
+  const homeTeamId = fixture?.localteam_id ?? homeTeam?.id;
+  const awayTeamId = fixture?.visitorteam_id ?? awayTeam?.id;
+  if (!fixture?.id || !homeTeam?.name || !awayTeam?.name) return null;
+
+  const runs = cricketRunRows(fixture);
+  const homeRun = latestRunForTeam(runs, homeTeamId);
+  const awayRun = latestRunForTeam(runs, awayTeamId);
+  const homeScore = score(homeRun?.score ?? homeRun?.runs);
+  const awayScore = score(awayRun?.score ?? awayRun?.runs);
+  const incidents = cricketIncidents(fixture, homeTeamId, awayTeamId, homeScore, awayScore);
+  const latestIncident = incidents.at(-1);
+  const status = cricketStatus(fixture.status);
+  const interrupted = /break|stump|tea|lunch|dinner|interrupted|delayed/i.test(String(fixture.status || ""));
+  const winnerId = fixture?.winner_team_id;
+  const settlementWinner = winnerId != null && String(winnerId) === String(homeTeamId)
+    ? "Home" as const
+    : winnerId != null && String(winnerId) === String(awayTeamId)
+      ? "Away" as const
+      : null;
+  const leagueName = league?.name || fixture?.round || "Live cricket";
+  const startTime = isoTimestamp(fixture?.starting_at);
+  const scoreFingerprint = `${cricketRunLabel(homeRun) || "x"}:${cricketRunLabel(awayRun) || "x"}`;
+
+  return {
+    updateId: `${fixture.id}:${fixture.status || "unknown"}:${scoreFingerprint}:${latestIncident?.providerIncidentId || fixture.updated_at || startTime}`,
+    providerId,
+    providerEventId: String(fixture.id),
+    sport: { name: "Cricket", slug: "cricket", icon: "🏏" },
+    league: { name: leagueName, slug: slugify(leagueName), country: league?.country?.name || league?.country || undefined },
+    homeTeam: homeTeam.name,
+    awayTeam: awayTeam.name,
+    startTime,
+    status,
+    homeScore,
+    awayScore,
+    scoreLabels: { home: cricketRunLabel(homeRun), away: cricketRunLabel(awayRun) },
+    scoreUpdatedAt: fixture.updated_at || new Date().toISOString(),
+    liveMinute: latestIncident?.sequence ?? null,
+    suspendMarkets: status === "live" && (interrupted || latestIncident?.type === "wicket"),
+    settlementWinner,
+    incidents,
+    markets: [],
+  };
+}
+
+async function fetchSportmonksCricket(config: SportsProviderConfig, apiKey: string | null) {
+  if (!apiKey) throw new Error("Sportmonks Cricket API token is missing");
+  const settings = config.settings || {};
+  const include = String(settings.include || "localteam,visitorteam,league,runs,balls,scoreboards");
+  const liveUrl = new URL("https://cricket.sportmonks.com/api/v2.0/livescores");
+  liveUrl.searchParams.set("api_token", apiKey);
+  liveUrl.searchParams.set("include", include);
+
+  const date = new Date();
+  const from = new Date(date.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const to = new Date(date.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const fixturesUrl = new URL("https://cricket.sportmonks.com/api/v2.0/fixtures");
+  fixturesUrl.searchParams.set("api_token", apiKey);
+  fixturesUrl.searchParams.set("include", include);
+  fixturesUrl.searchParams.set("filter[starts_between]", `${from},${to}`);
+  fixturesUrl.searchParams.set("sort", "starting_at");
+  if (settings.leagueId) fixturesUrl.searchParams.set("filter[league_id]", String(settings.leagueId).replace(/[^0-9]/g, ""));
+
+  const [liveResult, fixtureResult] = await Promise.allSettled([
+    fetchJson(liveUrl.toString(), undefined, 25_000),
+    fetchJson(fixturesUrl.toString(), undefined, 25_000),
+  ]);
+  if (liveResult.status === "rejected" && fixtureResult.status === "rejected") throw liveResult.reason;
+
+  const fixtures = [
+    ...(fixtureResult.status === "fulfilled" ? arrayFromProviderBody(fixtureResult.value) : []),
+    ...(liveResult.status === "fulfilled" ? arrayFromProviderBody(liveResult.value) : []),
+  ];
+  const unique = [...new Map(fixtures.map((fixture: any) => [String(fixture?.id || ""), fixture])).values()];
+  return unique.map((fixture) => normalizeSportmonksCricketFixture(fixture, config.id)).filter(Boolean) as NormalizedSportsEvent[];
 }
 
 const openLigaMatchSchema = z.object({
@@ -534,7 +764,11 @@ async function fetchOpenLigaDb(config: SportsProviderConfig) {
 export async function fetchProviderEvents(config: SportsProviderConfig, apiKey: string | null) {
   if (config.provider_type === "openligadb") return fetchOpenLigaDb(config);
   if (config.provider_type === "the_odds_api") return fetchTheOddsApi(config, apiKey);
-  if (config.provider_type === "sportmonks") return fetchSportmonks(config, apiKey);
+  if (config.provider_type === "sportmonks") {
+    return String(config.settings?.sport || "football").toLowerCase() === "cricket"
+      ? fetchSportmonksCricket(config, apiKey)
+      : fetchSportmonks(config, apiKey);
+  }
   return fetchSportsDb(config, apiKey);
 }
 

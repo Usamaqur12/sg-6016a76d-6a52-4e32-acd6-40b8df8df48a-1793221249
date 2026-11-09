@@ -56,9 +56,124 @@ function ingestionPayload(event: NormalizedSportsEvent) {
     home_score: event.homeScore ?? null,
     away_score: event.awayScore ?? null,
     live_minute: event.liveMinute ?? null,
-    resume_markets: false,
+    resume_markets: !event.suspendMarkets,
     markets: event.markets,
   };
+}
+
+function normalizedTeamName(value: string) {
+  return value.toLowerCase().replace(/\b(cricket club|cricket|cc|women|w)\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+type ExistingEvent = {
+  id: string;
+  provider_id: string | null;
+  provider_event_id: string | null;
+  home_team: string;
+  away_team: string;
+  start_time: string;
+  metadata: unknown;
+};
+
+async function findExistingEvent(event: NormalizedSportsEvent, sportId: string): Promise<ExistingEvent | null> {
+  const { data: mapped, error: mapError } = await supabaseAdmin
+    .from("provider_event_map")
+    .select("event_id")
+    .eq("provider_id", event.providerId)
+    .eq("provider_event_id", event.providerEventId)
+    .maybeSingle();
+  if (mapError) throw mapError;
+
+  if (mapped?.event_id) {
+    const { data, error } = await supabaseAdmin
+      .from("events")
+      .select("id, provider_id, provider_event_id, home_team, away_team, start_time, metadata")
+      .eq("id", mapped.event_id)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return data as ExistingEvent;
+  }
+
+  const { data: exact, error: exactError } = await supabaseAdmin
+    .from("events")
+    .select("id, provider_id, provider_event_id, home_team, away_team, start_time, metadata")
+    .eq("provider_id", event.providerId)
+    .eq("provider_event_id", event.providerEventId)
+    .maybeSingle();
+  if (exactError) throw exactError;
+  if (exact) return exact as ExistingEvent;
+
+  // Score and odds feeds normally use different event ids. Reconcile them by
+  // sport, team pair and a narrow kickoff window so the score feed enriches
+  // the bettable event instead of creating a duplicate fixture.
+  const kickoff = new Date(event.startTime).getTime();
+  const from = new Date(kickoff - 6 * 60 * 60 * 1000).toISOString();
+  const to = new Date(kickoff + 6 * 60 * 60 * 1000).toISOString();
+  const { data: candidates, error: candidateError } = await supabaseAdmin
+    .from("events")
+    .select("id, provider_id, provider_event_id, home_team, away_team, start_time, metadata")
+    .eq("sport_id", sportId)
+    .gte("start_time", from)
+    .lte("start_time", to)
+    .limit(30);
+  if (candidateError) throw candidateError;
+
+  const home = normalizedTeamName(event.homeTeam);
+  const away = normalizedTeamName(event.awayTeam);
+  return ((candidates || []) as ExistingEvent[]).find((candidate) =>
+    normalizedTeamName(candidate.home_team) === home
+    && normalizedTeamName(candidate.away_team) === away
+  ) || null;
+}
+
+async function recordCricketIncidents(event: NormalizedSportsEvent, eventId: string) {
+  if (!event.incidents?.length) return;
+  const rows = event.incidents.map((incident) => ({
+    provider_id: event.providerId,
+    update_id: `incident:${event.providerEventId}:${incident.providerIncidentId}`,
+    event_id: eventId,
+    payload: {
+      incident: incident.type,
+      incident_id: incident.providerIncidentId,
+      incident_description: incident.description || null,
+      live_minute: incident.sequence ?? null,
+      team_side: incident.teamSide || "neutral",
+      home_score: incident.homeScore ?? event.homeScore ?? null,
+      away_score: incident.awayScore ?? event.awayScore ?? null,
+    },
+  }));
+  const { error } = await supabaseAdmin
+    .from("feed_updates")
+    .upsert(rows, { onConflict: "provider_id,update_id", ignoreDuplicates: true });
+  if (error) throw error;
+}
+
+async function queueAutomaticMatchResult(event: NormalizedSportsEvent, eventId: string) {
+  if (!event.settlementWinner || event.status !== "finished" || event.homeScore == null || event.awayScore == null) return;
+  const { data: markets, error: marketError } = await supabaseAdmin
+    .from("markets")
+    .select("id, odds(selection)")
+    .eq("event_id", eventId)
+    .eq("type", "match_result");
+  if (marketError) throw marketError;
+
+  const resultMarkets = (markets || []).flatMap((market: any) => {
+    const selections = Array.isArray(market.odds) ? market.odds.map((odd: any) => String(odd.selection).toLowerCase()) : [];
+    return selections.includes(event.settlementWinner!.toLowerCase())
+      ? [{ market_id: market.id, winning_selection: event.settlementWinner }]
+      : [];
+  });
+  if (resultMarkets.length === 0) return;
+
+  const { error } = await supabaseAdmin.rpc("record_event_result_and_queue", {
+    p_event_id: eventId,
+    p_status: "finished",
+    p_home_score: event.homeScore,
+    p_away_score: event.awayScore,
+    p_market_results: resultMarkets,
+    p_provider_reference: `${event.providerId}:${event.providerEventId}:finished:${event.settlementWinner}`,
+  });
+  if (error) throw error;
 }
 
 async function importProviderEventDirect(event: NormalizedSportsEvent) {
@@ -89,14 +204,7 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
 
   if (leagueError) throw leagueError;
 
-  const { data: existing, error: lookupError } = await supabaseAdmin
-    .from("events")
-    .select("id, metadata")
-    .eq("provider_id", event.providerId)
-    .eq("provider_event_id", event.providerEventId)
-    .maybeSingle();
-
-  if (lookupError) throw lookupError;
+  const existing = await findExistingEvent(event, sport.id);
 
   const existingMetadata = existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
     ? existing.metadata as Record<string, unknown>
@@ -111,15 +219,21 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
     live_score_home: event.homeScore ?? null,
     live_score_away: event.awayScore ?? null,
     live_minute: event.liveMinute ?? null,
-    provider_id: event.providerId,
-    provider_event_id: event.providerEventId,
-    is_suspended: ["finished", "cancelled", "postponed"].includes(event.status),
+    provider_id: existing?.provider_id || event.providerId,
+    provider_event_id: existing?.provider_event_id || event.providerEventId,
+    is_suspended: Boolean(event.suspendMarkets) || ["finished", "cancelled", "postponed"].includes(event.status),
     metadata: {
       ...existingMetadata,
-      source: event.markets.length > 0 ? "odds-feed" : "score-feed",
-      providerId: event.providerId,
-      providerEventId: event.providerEventId,
-      scoreOnly: event.markets.length === 0,
+      source: event.markets.length > 0 ? "odds-feed" : (existingMetadata.source || "score-feed"),
+      providerId: existing?.provider_id || event.providerId,
+      providerEventId: existing?.provider_event_id || event.providerEventId,
+      scoreOnly: event.markets.length === 0 && !existing?.provider_id,
+      providerSources: {
+        ...(existingMetadata.providerSources && typeof existingMetadata.providerSources === "object"
+          ? existingMetadata.providerSources as Record<string, unknown>
+          : {}),
+        [event.providerId]: event.providerEventId,
+      },
       ...(event.scoreLabels ? {
         providerScore: {
           home: event.scoreLabels.home,
@@ -148,6 +262,24 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
 
     if (error) throw error;
     eventId = inserted.id;
+  }
+
+  const { error: mapError } = await supabaseAdmin
+    .from("provider_event_map")
+    .upsert({
+      provider_id: event.providerId,
+      provider_event_id: event.providerEventId,
+      event_id: eventId,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "provider_id,provider_event_id" });
+  if (mapError) throw mapError;
+
+  if (event.markets.length > 0) {
+    const { error } = await supabaseAdmin
+      .from("markets")
+      .update({ status: "suspended" })
+      .eq("event_id", eventId);
+    if (error) throw error;
   }
 
   for (const market of event.markets) {
@@ -190,6 +322,12 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
       marketId = insertedMarket.id;
     }
 
+    const { error: suspendOddsError } = await supabaseAdmin
+      .from("odds")
+      .update({ is_active: false, is_locked: true, updated_at: new Date().toISOString() })
+      .eq("market_id", marketId);
+    if (suspendOddsError) throw suspendOddsError;
+
     for (const outcome of market.outcomes) {
       const { data: existingOdd, error: oddLookupError } = await supabaseAdmin
         .from("odds")
@@ -222,6 +360,18 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
       }
     }
   }
+
+
+  if (event.suspendMarkets || ["finished", "cancelled", "postponed"].includes(event.status)) {
+    const { error } = await supabaseAdmin
+      .from("markets")
+      .update({ status: "suspended" })
+      .eq("event_id", eventId);
+    if (error) throw error;
+  }
+
+  await recordCricketIncidents(event, eventId);
+  await queueAutomaticMatchResult(event, eventId);
 
   return eventId;
 }
