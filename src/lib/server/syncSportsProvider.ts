@@ -20,6 +20,110 @@ type ProviderFailure = {
   hint?: string;
 };
 
+type ProviderVisuals = {
+  leagueLogoUrl?: string;
+  homeTeamLogoUrl?: string;
+  awayTeamLogoUrl?: string;
+};
+
+type TeamVisual = { logoUrl?: string; leagueId?: string };
+
+const teamVisualCache = new Map<string, Promise<TeamVisual>>();
+const leagueVisualCache = new Map<string, Promise<string | undefined>>();
+
+function assetUrl(value: unknown) {
+  const candidate = String(value || "").trim();
+  if (!candidate) return undefined;
+  try {
+    const url = new URL(candidate);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function assetName(value: string) {
+  return value.toLowerCase().replace(/\b(fc|afc|cf|club|women|w)\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function fetchTeamVisual(teamName: string) {
+  const cacheKey = assetName(teamName);
+  const cached = teamVisualCache.get(cacheKey);
+  if (cached) return cached;
+
+  const request = (async (): Promise<TeamVisual> => {
+    try {
+      const url = new URL("https://www.thesportsdb.com/api/v1/json/123/searchteams.php");
+      url.searchParams.set("t", teamName);
+      const response = await fetch(url, { signal: AbortSignal.timeout(5_000), cache: "no-store" });
+      if (!response.ok) return {};
+      const body = await response.json() as { teams?: Array<Record<string, unknown>> | null };
+      const teams = Array.isArray(body.teams) ? body.teams : [];
+      const exact = teams.find((team) => assetName(String(team.strTeam || "")) === cacheKey) || teams[0];
+      return exact ? {
+        logoUrl: assetUrl(exact.strBadge || exact.strLogo),
+        leagueId: exact.idLeague ? String(exact.idLeague) : undefined,
+      } : {};
+    } catch {
+      return {};
+    }
+  })();
+
+  teamVisualCache.set(cacheKey, request);
+  return request;
+}
+
+function fetchLeagueVisual(leagueId?: string) {
+  if (!leagueId) return Promise.resolve(undefined);
+  const cached = leagueVisualCache.get(leagueId);
+  if (cached) return cached;
+
+  const request = (async () => {
+    try {
+      const url = new URL("https://www.thesportsdb.com/api/v1/json/123/lookupleague.php");
+      url.searchParams.set("id", leagueId);
+      const response = await fetch(url, { signal: AbortSignal.timeout(5_000), cache: "no-store" });
+      if (!response.ok) return undefined;
+      const body = await response.json() as { leagues?: Array<Record<string, unknown>> | null };
+      const league = Array.isArray(body.leagues) ? body.leagues[0] : null;
+      return assetUrl(league?.strBadge || league?.strLogo || league?.strPoster);
+    } catch {
+      return undefined;
+    }
+  })();
+
+  leagueVisualCache.set(leagueId, request);
+  return request;
+}
+
+async function resolveProviderVisuals(event: NormalizedSportsEvent, metadata: Record<string, unknown>): Promise<ProviderVisuals> {
+  const stored = metadata.providerVisuals && typeof metadata.providerVisuals === "object" && !Array.isArray(metadata.providerVisuals)
+    ? metadata.providerVisuals as ProviderVisuals
+    : {};
+  let homeTeamLogoUrl = event.homeTeamLogoUrl || stored.homeTeamLogoUrl;
+  let awayTeamLogoUrl = event.awayTeamLogoUrl || stored.awayTeamLogoUrl;
+  let leagueLogoUrl = event.league.logoUrl || stored.leagueLogoUrl;
+  let homeVisual: TeamVisual = {};
+  let awayVisual: TeamVisual = {};
+
+  if (!homeTeamLogoUrl || !awayTeamLogoUrl || !leagueLogoUrl) {
+    [homeVisual, awayVisual] = await Promise.all([
+      !homeTeamLogoUrl || !leagueLogoUrl ? fetchTeamVisual(event.homeTeam) : Promise.resolve({}),
+      !awayTeamLogoUrl || !leagueLogoUrl ? fetchTeamVisual(event.awayTeam) : Promise.resolve({}),
+    ]);
+  }
+
+  homeTeamLogoUrl ||= homeVisual.logoUrl;
+  awayTeamLogoUrl ||= awayVisual.logoUrl;
+  leagueLogoUrl ||= await fetchLeagueVisual(homeVisual.leagueId || awayVisual.leagueId);
+
+  return {
+    ...(leagueLogoUrl ? { leagueLogoUrl } : {}),
+    ...(homeTeamLogoUrl ? { homeTeamLogoUrl } : {}),
+    ...(awayTeamLogoUrl ? { awayTeamLogoUrl } : {}),
+  };
+}
+
 function providerFailure(error: unknown): ProviderFailure {
   if (error instanceof Error) return { message: error.message };
   if (error && typeof error === "object") {
@@ -209,6 +313,7 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
   const existingMetadata = existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
     ? existing.metadata as Record<string, unknown>
     : {};
+  const providerVisuals = await resolveProviderVisuals(event, existingMetadata);
   const eventRecord = {
     sport_id: sport.id,
     league_id: league.id,
@@ -235,12 +340,7 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
         [event.providerId]: event.providerEventId,
       },
       providerVisuals: {
-        ...(existingMetadata.providerVisuals && typeof existingMetadata.providerVisuals === "object"
-          ? existingMetadata.providerVisuals as Record<string, unknown>
-          : {}),
-        ...(event.league.logoUrl ? { leagueLogoUrl: event.league.logoUrl } : {}),
-        ...(event.homeTeamLogoUrl ? { homeTeamLogoUrl: event.homeTeamLogoUrl } : {}),
-        ...(event.awayTeamLogoUrl ? { awayTeamLogoUrl: event.awayTeamLogoUrl } : {}),
+        ...providerVisuals,
       },
       ...(event.scoreLabels ? {
         providerScore: {
