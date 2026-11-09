@@ -11,7 +11,7 @@ interface EventCardProps {
     league: string;
     startTime: string;
     isLive?: boolean;
-    liveScore?: { home: number; away: number };
+    liveScore?: { home: number; away: number; homeDisplay?: string; awayDisplay?: string };
     liveMinute?: number;
     homeOdds: number;
     drawOdds?: number;
@@ -73,11 +73,11 @@ export function EventCard({
           <div className="space-y-1.5 mb-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold truncate flex-1">{event.homeTeam}</span>
-              <span className="ml-2 text-lg font-mono font-black text-primary">{event.liveScore.home}</span>
+              <span className="ml-2 text-lg font-mono font-black text-primary">{event.liveScore.homeDisplay || event.liveScore.home}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold truncate flex-1">{event.awayTeam}</span>
-              <span className="ml-2 text-lg font-mono font-black text-primary">{event.liveScore.away}</span>
+              <span className="ml-2 text-lg font-mono font-black text-primary">{event.liveScore.awayDisplay || event.liveScore.away}</span>
             </div>
           </div>
         ) : (

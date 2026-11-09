@@ -25,6 +25,8 @@ export interface NormalizedSportsEvent {
   status: "upcoming" | "live" | "finished" | "cancelled" | "postponed";
   homeScore?: number | null;
   awayScore?: number | null;
+  scoreLabels?: { home: string | null; away: string | null };
+  scoreUpdatedAt?: string | null;
   liveMinute?: number | null;
   markets: Array<{
     name: string;
@@ -193,6 +195,24 @@ const oddsApiSportSchema = z.object({
   has_outrights: z.boolean().optional(),
 }).passthrough();
 
+const oddsApiScoreEventSchema = z.object({
+  id: z.string().min(1),
+  completed: z.boolean(),
+  home_team: z.string().min(1),
+  away_team: z.string().min(1),
+  scores: z.array(z.object({
+    name: z.string().min(1),
+    score: z.union([z.string(), z.number()]).transform(String),
+  }).passthrough()).nullable(),
+  last_update: z.string().nullish(),
+}).passthrough();
+
+function cricketScoreNumber(value: string | null | undefined) {
+  if (!value) return null;
+  const match = value.match(/\d+/);
+  return match ? Number(match[0]) : null;
+}
+
 function oddsApiSport(sportKey: string, sportTitle: string) {
   const prefix = sportKey.toLowerCase().split("_")[0];
   const known: Record<string, { name: string; slug: string; icon: string }> = {
@@ -258,11 +278,25 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
     url.searchParams.set("oddsFormat", "decimal");
     url.searchParams.set("dateFormat", "iso");
     url.searchParams.set("apiKey", apiKey);
-    const body = await fetchJson(url.toString());
-    return Array.isArray(body) ? body : [];
+    const scoresUrl = new URL(`https://api.the-odds-api.com/v4/sports/${activeSportKey}/scores/`);
+    scoresUrl.searchParams.set("dateFormat", "iso");
+    scoresUrl.searchParams.set("apiKey", apiKey);
+
+    const [oddsResult, scoresResult] = await Promise.allSettled([
+      fetchJson(url.toString()),
+      fetchJson(scoresUrl.toString()),
+    ]);
+    if (oddsResult.status === "rejected") throw oddsResult.reason;
+    return {
+      odds: Array.isArray(oddsResult.value) ? oddsResult.value : [],
+      scores: scoresResult.status === "fulfilled" && Array.isArray(scoresResult.value)
+        ? scoresResult.value
+        : [],
+    };
   }));
 
-  const rawEvents = responses.flatMap((response) => response.status === "fulfilled" ? response.value : []);
+  const rawEvents = responses.flatMap((response) => response.status === "fulfilled" ? response.value.odds : []);
+  const rawScores = responses.flatMap((response) => response.status === "fulfilled" ? response.value.scores : []);
   if (rawEvents.length === 0 && responses.every((response) => response.status === "rejected")) {
     const firstFailure = responses.find((response) => response.status === "rejected");
     throw firstFailure && firstFailure.status === "rejected"
@@ -270,11 +304,17 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
       : new Error("The Odds API cricket requests failed");
   }
 
+  const scoresByEventId = new Map(rawScores.flatMap((value) => {
+    const parsed = oddsApiScoreEventSchema.safeParse(value);
+    return parsed.success ? [[parsed.data.id, parsed.data] as const] : [];
+  }));
+
   const normalized = rawEvents.map((value): NormalizedSportsEvent | null => {
     const parsed = oddsApiEventSchema.safeParse(value);
     if (!parsed.success) return null;
 
     const event = parsed.data;
+    const scoreEvent = scoresByEventId.get(event.id);
     const preferred = event.bookmakers.find((bookmaker) =>
       bookmaker.key.toLowerCase() === bookmakerKey
       && bookmaker.markets.some((market) => market.key === "h2h")
@@ -307,9 +347,14 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
     const startTime = isoTimestamp(event.commence_time);
     const kickoffMs = new Date(startTime).getTime();
     const liveAgeMs = Date.now() - kickoffMs;
-    const status = liveAgeMs >= 0 && liveAgeMs <= 6 * 60 * 60 * 1000
-      ? "live" as const
-      : "upcoming" as const;
+    const homeScoreLabel = scoreEvent?.scores?.find((entry) => entry.name === event.home_team)?.score || null;
+    const awayScoreLabel = scoreEvent?.scores?.find((entry) => entry.name === event.away_team)?.score || null;
+    const hasProviderScore = homeScoreLabel !== null || awayScoreLabel !== null;
+    const status = scoreEvent?.completed
+      ? "finished" as const
+      : hasProviderScore || (liveAgeMs >= 0 && liveAgeMs <= 6 * 60 * 60 * 1000)
+        ? "live" as const
+        : "upcoming" as const;
     const normalizedSport = oddsApiSport(event.sport_key, event.sport_title);
     const oddsFingerprint = normalizedOutcomes
       .map((outcome) => `${outcome.selection}:${outcome.value}`)
@@ -329,8 +374,10 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
       awayTeam: event.away_team,
       startTime,
       status,
-      homeScore: null,
-      awayScore: null,
+      homeScore: cricketScoreNumber(homeScoreLabel),
+      awayScore: cricketScoreNumber(awayScoreLabel),
+      scoreLabels: hasProviderScore ? { home: homeScoreLabel, away: awayScoreLabel } : undefined,
+      scoreUpdatedAt: scoreEvent?.last_update || null,
       liveMinute: null,
       markets: [{
         name: "Match Result",

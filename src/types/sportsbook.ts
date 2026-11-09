@@ -22,7 +22,7 @@ export interface SportsbookEvent {
   startTime: string;
   startTimeIso: string;
   isLive: boolean;
-  liveScore?: { home: number; away: number };
+  liveScore?: { home: number; away: number; homeDisplay?: string; awayDisplay?: string; updatedAt?: string };
   liveMinute?: number;
   homeOdds: number;
   drawOdds?: number;

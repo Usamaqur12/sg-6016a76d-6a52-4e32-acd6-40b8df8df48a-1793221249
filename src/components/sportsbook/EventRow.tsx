@@ -11,7 +11,7 @@ interface EventRowProps {
     league?: string;
     startTime: string;
     isLive?: boolean;
-    liveScore?: { home: number; away: number };
+    liveScore?: { home: number; away: number; homeDisplay?: string; awayDisplay?: string };
     liveMinute?: number;
     homeOdds: number;
     drawOdds?: number;
@@ -83,11 +83,11 @@ export function EventRow({
                 <div className="space-y-0.5">
                   <div className="flex items-center justify-between text-xs font-semibold">
                     <span className="truncate">{event.homeTeam}</span>
-                    <span className="ml-2 font-mono font-bold text-primary">{event.liveScore.home}</span>
+                    <span className="ml-2 font-mono font-bold text-primary">{event.liveScore.homeDisplay || event.liveScore.home}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs font-semibold">
                     <span className="truncate">{event.awayTeam}</span>
-                    <span className="ml-2 font-mono font-bold text-primary">{event.liveScore.away}</span>
+                    <span className="ml-2 font-mono font-bold text-primary">{event.liveScore.awayDisplay || event.liveScore.away}</span>
                   </div>
                 </div>
               ) : (

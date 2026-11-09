@@ -91,13 +91,16 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
 
   const { data: existing, error: lookupError } = await supabaseAdmin
     .from("events")
-    .select("id")
+    .select("id, metadata")
     .eq("provider_id", event.providerId)
     .eq("provider_event_id", event.providerEventId)
     .maybeSingle();
 
   if (lookupError) throw lookupError;
 
+  const existingMetadata = existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+    ? existing.metadata as Record<string, unknown>
+    : {};
   const eventRecord = {
     sport_id: sport.id,
     league_id: league.id,
@@ -112,10 +115,18 @@ async function importProviderEventDirect(event: NormalizedSportsEvent) {
     provider_event_id: event.providerEventId,
     is_suspended: ["finished", "cancelled", "postponed"].includes(event.status),
     metadata: {
+      ...existingMetadata,
       source: event.markets.length > 0 ? "odds-feed" : "score-feed",
       providerId: event.providerId,
       providerEventId: event.providerEventId,
       scoreOnly: event.markets.length === 0,
+      ...(event.scoreLabels ? {
+        providerScore: {
+          home: event.scoreLabels.home,
+          away: event.scoreLabels.away,
+          updatedAt: event.scoreUpdatedAt || new Date().toISOString(),
+        },
+      } : {}),
     },
     updated_at: new Date().toISOString(),
   };
@@ -268,7 +279,9 @@ export async function syncSportsProvider(provider: ManagedSportsProvider, mode: 
         event: `${event.homeTeam} vs ${event.awayTeam}`,
         league: event.league.name,
         status: event.status,
-        score: event.homeScore == null ? null : `${event.homeScore}-${event.awayScore ?? 0}`,
+        score: event.scoreLabels
+          ? `${event.scoreLabels.home ?? "–"}-${event.scoreLabels.away ?? "–"}`
+          : event.homeScore == null ? null : `${event.homeScore}-${event.awayScore ?? 0}`,
         startTime: event.startTime,
       })),
     };

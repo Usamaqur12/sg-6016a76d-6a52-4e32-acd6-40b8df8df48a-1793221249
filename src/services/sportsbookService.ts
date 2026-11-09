@@ -65,6 +65,12 @@ function mapSportsbookEvent(event: RawSportsbookEvent): SportsbookEvent {
 
   const isLive = event.status === "live";
   const hasScore = event.live_score_home != null || event.live_score_away != null;
+  const metadata = event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)
+    ? event.metadata as Record<string, unknown>
+    : {};
+  const providerScore = metadata.providerScore && typeof metadata.providerScore === "object" && !Array.isArray(metadata.providerScore)
+    ? metadata.providerScore as Record<string, unknown>
+    : null;
 
   return {
     id: event.id,
@@ -80,6 +86,9 @@ function mapSportsbookEvent(event: RawSportsbookEvent): SportsbookEvent {
       ? {
           home: Number(event.live_score_home || 0),
           away: Number(event.live_score_away || 0),
+          homeDisplay: typeof providerScore?.home === "string" ? providerScore.home : undefined,
+          awayDisplay: typeof providerScore?.away === "string" ? providerScore.away : undefined,
+          updatedAt: typeof providerScore?.updatedAt === "string" ? providerScore.updatedAt : undefined,
         }
       : undefined,
     liveMinute: event.live_minute ?? undefined,
