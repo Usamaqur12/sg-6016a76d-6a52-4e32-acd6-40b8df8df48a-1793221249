@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CountryFlag } from "@/components/ui/CountryFlag";
 import type { SportsbookMarket, SportsbookOutcome } from "@/types/sportsbook";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -17,8 +18,11 @@ interface EventMarketsModalProps {
     id: string;
     sportSlug?: string;
     league: string;
+    leagueCountryCode?: string;
     homeTeam: string;
+    homeCountryCode?: string;
     awayTeam: string;
+    awayCountryCode?: string;
     homeOdds: number;
     drawOdds?: number;
     awayOdds: number;
@@ -77,6 +81,7 @@ export function EventMarketsModal({
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
+                <CountryFlag code={event.leagueCountryCode} label={event.league} />
                 <span className="text-sm text-muted-foreground">{event.league}</span>
                 {event.isLive && event.liveScore && (
                   <Badge variant="outline" className="badge-live gap-1.5">
@@ -89,8 +94,16 @@ export function EventMarketsModal({
                   </Badge>
                 )}
               </div>
-              <DialogTitle className="text-2xl">
-                {event.homeTeam} vs {event.awayTeam}
+              <DialogTitle className="flex flex-wrap items-center gap-2 text-2xl">
+                <span className="inline-flex items-center gap-2">
+                  <CountryFlag code={event.homeCountryCode} label={event.homeTeam} />
+                  {event.homeTeam}
+                </span>
+                <span className="text-muted-foreground">vs</span>
+                <span className="inline-flex items-center gap-2">
+                  <CountryFlag code={event.awayCountryCode} label={event.awayTeam} />
+                  {event.awayTeam}
+                </span>
               </DialogTitle>
             </div>
             {onToggleFavorite && <Button variant="ghost" size="icon" aria-label={isFavorite ? "Remove event from favorites" : "Add event to favorites"} onClick={onToggleFavorite}>

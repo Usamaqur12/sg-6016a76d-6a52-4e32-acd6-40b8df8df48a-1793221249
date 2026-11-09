@@ -8,6 +8,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CountryFlag } from "@/components/ui/CountryFlag";
 import { cn } from "@/lib/utils";
 import { fetchUpcomingEvents } from "@/services/sportsbookService";
 
@@ -16,7 +17,7 @@ type ActiveSport = {
   name: string;
   icon: string;
   count: number;
-  leagues: Array<{ name: string; count: number }>;
+  leagues: Array<{ name: string; count: number; countryCode?: string }>;
 };
 
 const configuredSports = [
@@ -61,7 +62,7 @@ export function SportsNav() {
         const grouped = new Map<string, {
           name: string;
           count: number;
-          leagues: Map<string, number>;
+          leagues: Map<string, { count: number; countryCode?: string }>;
         }>();
 
         for (const event of events) {
@@ -74,17 +75,21 @@ export function SportsNav() {
           const current = grouped.get(sportId) || {
             name: event.sport,
             count: 0,
-            leagues: new Map<string, number>(),
+            leagues: new Map<string, { count: number; countryCode?: string }>(),
           };
           current.count += 1;
-          current.leagues.set(event.league, (current.leagues.get(event.league) || 0) + 1);
+          const league = current.leagues.get(event.league);
+          current.leagues.set(event.league, {
+            count: (league?.count || 0) + 1,
+            countryCode: league?.countryCode || event.leagueCountryCode,
+          });
           grouped.set(sportId, current);
         }
 
         const configuredIds = new Set(configuredSports.map((sport) => sport.id));
-        const toLeagues = (leagues: Map<string, number> | undefined) =>
+        const toLeagues = (leagues: Map<string, { count: number; countryCode?: string }> | undefined) =>
           [...(leagues?.entries() || [])]
-            .map(([name, count]) => ({ name, count }))
+            .map(([name, value]) => ({ name, count: value.count, countryCode: value.countryCode }))
             .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name));
 
         const nextSports: ActiveSport[] = configuredSports.map((sport) => {
@@ -225,7 +230,10 @@ export function SportsNav() {
                                 ? "bg-primary/10 text-primary"
                                 : "text-muted-foreground hover:text-foreground hover:bg-surface-elevated"
                             )}>
-                              <span className="truncate">{league.name}</span>
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <CountryFlag code={league.countryCode} label={league.name} className="h-3 w-4" />
+                                <span className="truncate">{league.name}</span>
+                              </span>
                               <span className="text-[10px] font-mono ml-1 flex-shrink-0">{league.count}</span>
                             </button>
                           </Link>

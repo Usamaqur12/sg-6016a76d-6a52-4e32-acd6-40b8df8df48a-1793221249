@@ -5,13 +5,14 @@ import type {
   SportsbookMarket,
   SportsbookOutcome,
 } from "@/types/sportsbook";
+import { leagueCountryCode, teamCountryCode } from "@/lib/countryFlags";
 
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Market = Database["public"]["Tables"]["markets"]["Row"];
 type Odds = Database["public"]["Tables"]["odds"]["Row"];
 
 type RawSportsbookEvent = Event & {
-  leagues: { name: string } | null;
+  leagues: { name: string; country: string | null } | null;
   sports: { name: string; slug: string } | null;
   markets: Array<Market & { odds: Odds[] }>;
 };
@@ -71,6 +72,7 @@ function mapSportsbookEvent(event: RawSportsbookEvent): SportsbookEvent {
   const providerScore = metadata.providerScore && typeof metadata.providerScore === "object" && !Array.isArray(metadata.providerScore)
     ? metadata.providerScore as Record<string, unknown>
     : null;
+  const eventLeagueCountryCode = leagueCountryCode(event.leagues?.name, event.leagues?.country);
 
   return {
     id: event.id,
@@ -79,6 +81,9 @@ function mapSportsbookEvent(event: RawSportsbookEvent): SportsbookEvent {
     homeTeam: event.home_team,
     awayTeam: event.away_team,
     league: event.leagues?.name || "Imported fixtures",
+    leagueCountryCode: eventLeagueCountryCode,
+    homeCountryCode: teamCountryCode(event.home_team, eventLeagueCountryCode),
+    awayCountryCode: teamCountryCode(event.away_team, eventLeagueCountryCode),
     startTime: formatKickoff(event.start_time),
     startTimeIso: event.start_time,
     isLive,
@@ -109,7 +114,7 @@ function isBettableEvent(event: SportsbookEvent) {
   );
 }
 
-const eventSelect = "*, leagues(name), sports(name, slug), markets(*, odds(*))";
+const eventSelect = "*, leagues(name, country), sports(name, slug), markets(*, odds(*))";
 
 export async function fetchLiveEvents(): Promise<SportsbookEvent[]> {
   const { data: events, error } = await db

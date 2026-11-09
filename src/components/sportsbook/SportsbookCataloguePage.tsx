@@ -24,6 +24,7 @@ import { getUserFavoriteEventIds, toggleFavorite } from "@/services/favoritesSer
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CountryFlag } from "@/components/ui/CountryFlag";
 import type { SportsbookEvent, SportsbookOutcome } from "@/types/sportsbook";
 
 interface SportsbookCataloguePageProps {
@@ -289,6 +290,7 @@ export function SportsbookCataloguePage({
               groupedEvents.map(([league, leagueEvents]) => (
                 <section key={league}>
                   <div className="flex items-center gap-2 mb-2">
+                    <CountryFlag code={leagueEvents[0]?.leagueCountryCode} label={league} />
                     <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{league}</h2>
                     <Badge variant="outline" className="h-4 text-[10px] px-1">{leagueEvents.length}</Badge>
                   </div>

@@ -1,5 +1,6 @@
 import { Star, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CountryFlag } from "@/components/ui/CountryFlag";
 import { cn } from "@/lib/utils";
 import type { SportsbookOutcome } from "@/types/sportsbook";
 
@@ -9,6 +10,9 @@ interface EventRowProps {
     homeTeam: string;
     awayTeam: string;
     league?: string;
+    leagueCountryCode?: string;
+    homeCountryCode?: string;
+    awayCountryCode?: string;
     startTime: string;
     isLive?: boolean;
     liveScore?: { home: number; away: number; homeDisplay?: string; awayDisplay?: string };
@@ -66,9 +70,10 @@ export function EventRow({
 
         {/* Teams + League */}
         <div className="min-w-0">
-          <p className="text-[10px] text-subtle-foreground font-bold uppercase tracking-wide mb-0.5 truncate">
-            {event.league}
-          </p>
+          <div className="mb-0.5 flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-subtle-foreground">
+            <CountryFlag code={event.leagueCountryCode} label={event.league} className="h-3 w-4" />
+            <span className="truncate">{event.league}</span>
+          </div>
           <div className="flex items-center gap-2">
             {/* Mobile Favorite */}
             <button
@@ -82,18 +87,30 @@ export function EventRow({
               {event.isLive && event.liveScore ? (
                 <div className="space-y-0.5">
                   <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="truncate">{event.homeTeam}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <CountryFlag code={event.homeCountryCode} label={event.homeTeam} className="h-3 w-4" />
+                      <span className="truncate">{event.homeTeam}</span>
+                    </span>
                     <span className="ml-2 font-mono font-bold text-primary">{event.liveScore.homeDisplay || event.liveScore.home}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="truncate">{event.awayTeam}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <CountryFlag code={event.awayCountryCode} label={event.awayTeam} className="h-3 w-4" />
+                      <span className="truncate">{event.awayTeam}</span>
+                    </span>
                     <span className="ml-2 font-mono font-bold text-primary">{event.liveScore.awayDisplay || event.liveScore.away}</span>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-0.5">
-                  <p className="text-xs font-semibold truncate">{event.homeTeam}</p>
-                  <p className="text-xs font-semibold truncate">{event.awayTeam}</p>
+                  <p className="flex min-w-0 items-center gap-1.5 text-xs font-semibold">
+                    <CountryFlag code={event.homeCountryCode} label={event.homeTeam} className="h-3 w-4" />
+                    <span className="truncate">{event.homeTeam}</span>
+                  </p>
+                  <p className="flex min-w-0 items-center gap-1.5 text-xs font-semibold">
+                    <CountryFlag code={event.awayCountryCode} label={event.awayTeam} className="h-3 w-4" />
+                    <span className="truncate">{event.awayTeam}</span>
+                  </p>
                 </div>
               )}
             </div>
