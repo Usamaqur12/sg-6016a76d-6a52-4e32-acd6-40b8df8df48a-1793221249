@@ -185,6 +185,14 @@ const oddsApiEventSchema = z.object({
   }).passthrough()),
 }).passthrough();
 
+const oddsApiSportSchema = z.object({
+  key: z.string().min(1),
+  group: z.string().min(1),
+  title: z.string().min(1),
+  active: z.boolean(),
+  has_outrights: z.boolean().optional(),
+}).passthrough();
+
 function oddsApiSport(sportKey: string, sportTitle: string) {
   const prefix = sportKey.toLowerCase().split("_")[0];
   const known: Record<string, { name: string; slug: string; icon: string }> = {
@@ -217,23 +225,52 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
   const sportKey = String(settings.sportKey || "soccer_epl").trim();
   const regions = String(settings.regions || "eu").trim().toLowerCase();
   const bookmakerKey = String(settings.bookmakerKey || "onexbet").trim().toLowerCase();
+  const maxCompetitions = Math.min(Math.max(Number(settings.maxCompetitions || 8), 1), 20);
 
   if (!/^[a-z0-9_]{3,80}$/i.test(sportKey)) throw new Error("Invalid The Odds API sport key");
   if (!/^(us|us2|uk|eu|au|ca|fr|se|fi)(,(us|us2|uk|eu|au|ca|fr|se|fi))*$/.test(regions)) {
     throw new Error("Invalid The Odds API region");
   }
 
-  const url = new URL(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds/`);
-  url.searchParams.set("regions", regions);
-  url.searchParams.set("markets", "h2h");
-  url.searchParams.set("oddsFormat", "decimal");
-  url.searchParams.set("dateFormat", "iso");
-  url.searchParams.set("apiKey", apiKey);
+  let sportKeys = [sportKey];
+  if (sportKey === "cricket_active") {
+    const sportsUrl = new URL("https://api.the-odds-api.com/v4/sports/");
+    sportsUrl.searchParams.set("apiKey", apiKey);
+    const sportsBody = await fetchJson(sportsUrl.toString());
+    const activeCricket = (Array.isArray(sportsBody) ? sportsBody : [])
+      .map((value) => oddsApiSportSchema.safeParse(value))
+      .filter((result) => result.success)
+      .map((result) => result.data)
+      .filter((sport) => sport.active
+        && !sport.has_outrights
+        && (sport.group.toLowerCase() === "cricket" || sport.key.startsWith("cricket_")))
+      .sort((left, right) => left.title.localeCompare(right.title))
+      .slice(0, maxCompetitions);
 
-  const body = await fetchJson(url.toString());
-  const rawEvents = Array.isArray(body) ? body : [];
+    sportKeys = activeCricket.map((sport) => sport.key);
+    if (sportKeys.length === 0) return [];
+  }
 
-  return rawEvents.map((value): NormalizedSportsEvent | null => {
+  const responses = await Promise.allSettled(sportKeys.map(async (activeSportKey) => {
+    const url = new URL(`https://api.the-odds-api.com/v4/sports/${activeSportKey}/odds/`);
+    url.searchParams.set("regions", regions);
+    url.searchParams.set("markets", "h2h");
+    url.searchParams.set("oddsFormat", "decimal");
+    url.searchParams.set("dateFormat", "iso");
+    url.searchParams.set("apiKey", apiKey);
+    const body = await fetchJson(url.toString());
+    return Array.isArray(body) ? body : [];
+  }));
+
+  const rawEvents = responses.flatMap((response) => response.status === "fulfilled" ? response.value : []);
+  if (rawEvents.length === 0 && responses.every((response) => response.status === "rejected")) {
+    const firstFailure = responses.find((response) => response.status === "rejected");
+    throw firstFailure && firstFailure.status === "rejected"
+      ? firstFailure.reason
+      : new Error("The Odds API cricket requests failed");
+  }
+
+  const normalized = rawEvents.map((value): NormalizedSportsEvent | null => {
     const parsed = oddsApiEventSchema.safeParse(value);
     if (!parsed.success) return null;
 
@@ -253,7 +290,7 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
         ? "Home"
         : outcome.name === event.away_team
           ? "Away"
-          : outcome.name.toLowerCase() === "draw"
+          : ["draw", "tie"].includes(outcome.name.toLowerCase())
             ? "Draw"
             : null;
       const value = Number(outcome.price);
@@ -303,6 +340,8 @@ async function fetchTheOddsApi(config: SportsProviderConfig, apiKey: string | nu
       }],
     };
   }).filter(Boolean) as NormalizedSportsEvent[];
+
+  return [...new Map(normalized.map((event) => [event.providerEventId, event])).values()];
 }
 
 function participantName(participants: any[], location: "home" | "away") {

@@ -26,6 +26,7 @@ const providerSchema = z.object({
   isEnabled: z.boolean().default(false),
   priority: z.number().int().min(1).max(1000).default(100),
   syncIntervalSeconds: z.number().int().min(5).max(3600).default(60),
+  copyApiKeyFromProviderId: z.string().uuid().optional(),
 });
 
 function sanitizeProvider(provider: Record<string, unknown>) {
@@ -88,7 +89,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : value.providerType;
       const isPublicProvider = ["openligadb", "thesportsdb_demo"].includes(effectiveProviderType);
 
-      if (!isPublicProvider && !value.apiKey) {
+      let encryptedApiKey: string | null = null;
+      if (!isPublicProvider && value.apiKey) {
+        encryptedApiKey = encryptProviderSecret(value.apiKey);
+      } else if (!isPublicProvider && value.copyApiKeyFromProviderId) {
+        const { data: sourceProvider, error: sourceError } = await supabaseAdmin
+          .from("sports_feed_providers")
+          .select("provider_type, encrypted_api_key")
+          .eq("id", value.copyApiKeyFromProviderId)
+          .single();
+
+        if (sourceError || !sourceProvider?.encrypted_api_key) {
+          return res.status(400).json({ error: "The selected provider has no reusable API key" });
+        }
+        if (sourceProvider.provider_type !== effectiveProviderType) {
+          return res.status(400).json({ error: "API keys can only be reused by the same provider type" });
+        }
+        encryptedApiKey = sourceProvider.encrypted_api_key;
+      }
+
+      if (!isPublicProvider && !encryptedApiKey) {
         return res.status(400).json({ error: "This premium provider requires an API key" });
       }
 
@@ -103,7 +123,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data, error } = await supabaseAdmin.from("sports_feed_providers").insert({
         name: normalizedFromFreeV1 ? "TheSportsDB Free v1" : value.name,
         provider_type: effectiveProviderType,
-        encrypted_api_key: isPublicProvider ? null : encryptProviderSecret(value.apiKey || ""),
+        encrypted_api_key: encryptedApiKey,
         settings,
         is_enabled: value.isEnabled,
         is_demo: isPublicProvider,

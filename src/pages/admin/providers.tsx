@@ -18,7 +18,7 @@ interface ProviderRecord {
   id: string;
   name: string;
   provider_type: ProviderType;
-  settings: { leagueId?: string; leagueShortcut?: string; sport?: string; latestOnly?: boolean; sportKey?: string; regions?: string; bookmakerKey?: string };
+  settings: { leagueId?: string; leagueShortcut?: string; sport?: string; latestOnly?: boolean; sportKey?: string; regions?: string; bookmakerKey?: string; maxCompetitions?: number };
   is_enabled: boolean;
   is_demo: boolean;
   priority: number;
@@ -128,6 +128,36 @@ export default function SportsProvidersPage() {
     }
   }
 
+  async function addCricketOdds(provider: ProviderRecord) {
+    if (provider.provider_type !== "the_odds_api") return;
+    setWorkingId(`cricket-${provider.id}`);
+    try {
+      const body = await adminFetch("/api/admin/sports-providers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "The Odds API Cricket",
+          providerType: "the_odds_api",
+          copyApiKeyFromProviderId: provider.id,
+          settings: {
+            sportKey: "cricket_active",
+            regions: provider.settings?.regions || "uk",
+            bookmakerKey: provider.settings?.bookmakerKey || "onexbet",
+            maxCompetitions: 8,
+          },
+          isEnabled: true,
+          priority: 20,
+          syncIntervalSeconds: Math.max(provider.sync_interval_seconds || 3600, 3600),
+        }),
+      });
+      toast({ title: "Cricket odds added", description: body.message || "Active cricket tournaments are now syncing." });
+      await loadProviders();
+    } catch (error) {
+      toast({ title: "Cricket odds could not be added", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
   async function updateProvider(provider: ProviderRecord, changes: Record<string, unknown>) {
     setWorkingId(provider.id);
     try {
@@ -212,7 +242,7 @@ export default function SportsProvidersPage() {
               {!['thesportsdb_demo', 'openligadb'].includes(providerType) && <div className="space-y-2"><Label htmlFor="provider-key">{providerType === "the_odds_api" ? "The Odds API key" : "API key/token or TheSportsDB v1 cURL URL"}</Label><div className="flex gap-2"><Input id="provider-key" type={showKey ? "text" : "password"} autoComplete="new-password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /><Button type="button" size="icon" variant="outline" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "Hide API key" : "Show API key"}>{showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button></div></div>}
               {providerType === "the_odds_api" ? (
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="space-y-2"><Label htmlFor="odds-sport-key">Sport key</Label><Input id="odds-sport-key" value={oddsSportKey} onChange={(event) => setOddsSportKey(event.target.value)} placeholder="soccer_epl" /></div>
+                  <div className="space-y-2"><Label htmlFor="odds-sport-key">Sport key</Label><Input id="odds-sport-key" value={oddsSportKey} onChange={(event) => setOddsSportKey(event.target.value)} placeholder="soccer_epl" /><div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => { setOddsSportKey("cricket_active"); setName("The Odds API Cricket"); setSyncInterval("3600"); }}>All active cricket</Button><Button type="button" size="sm" variant="ghost" onClick={() => { setOddsSportKey("soccer_epl"); setName("The Odds API EPL"); }}>EPL</Button></div></div>
                   <div className="space-y-2"><Label htmlFor="odds-regions">Region</Label><Input id="odds-regions" value={oddsRegions} onChange={(event) => setOddsRegions(event.target.value)} placeholder="eu" /></div>
                   <div className="space-y-2"><Label htmlFor="odds-bookmaker">Preferred bookmaker</Label><Input id="odds-bookmaker" value={oddsBookmakerKey} onChange={(event) => setOddsBookmakerKey(event.target.value)} placeholder="onexbet" /></div>
                 </div>
@@ -232,10 +262,10 @@ export default function SportsProvidersPage() {
                 {providers.length === 0 ? <p className="py-10 text-center text-sm text-muted-foreground">{loading ? "Loading providers…" : "No provider configured."}</p> : providers.map((provider) => (
                   <div key={provider.id} className="rounded-lg border border-border p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{provider.name}</h3><Badge variant={provider.status === "healthy" ? "outline" : provider.status === "error" ? "destructive" : "secondary"}>{provider.status.replace(/_/g, " ")}</Badge>{provider.is_demo && <Badge variant="secondary">Preview</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">{providerLabels[provider.provider_type]} · every {provider.sync_interval_seconds}s · {provider.last_event_count || 0} last events</p>{provider.last_success_at && <p className="mt-1 text-xs text-muted-foreground">Last success: {new Date(provider.last_success_at).toLocaleString()}</p>}{provider.last_error && <p className="mt-1 text-xs text-destructive">{provider.last_error}</p>}</div>
+                      <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{provider.name}</h3><Badge variant={provider.status === "healthy" ? "outline" : provider.status === "error" ? "destructive" : "secondary"}>{provider.status.replace(/_/g, " ")}</Badge>{provider.is_demo && <Badge variant="secondary">Preview</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">{providerLabels[provider.provider_type]}{provider.settings?.sportKey ? ` · ${provider.settings.sportKey === "cricket_active" ? "all active cricket" : provider.settings.sportKey}` : ""} · every {provider.sync_interval_seconds}s · {provider.last_event_count || 0} last events</p>{provider.last_success_at && <p className="mt-1 text-xs text-muted-foreground">Last success: {new Date(provider.last_success_at).toLocaleString()}</p>}{provider.last_error && <p className="mt-1 text-xs text-destructive">{provider.last_error}</p>}</div>
                       <div className="flex items-center gap-2"><Switch checked={provider.is_enabled} onCheckedChange={(checked) => void updateProvider(provider, { isEnabled: checked })} disabled={workingId === provider.id} /><Button size="icon" variant="ghost" className="text-destructive" onClick={() => void deleteProvider(provider.id)} disabled={workingId === provider.id} aria-label="Delete provider"><Trash2 className="h-4 w-4" /></Button></div>
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void runAction(provider, "test")} disabled={workingId === provider.id}><Activity className="mr-2 h-4 w-4" />Test connection</Button><Button size="sm" onClick={() => void runAction(provider, "sync")} disabled={!provider.is_enabled || workingId === provider.id}><Save className="mr-2 h-4 w-4" />Sync now</Button></div>
+                    <div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void runAction(provider, "test")} disabled={workingId === provider.id}><Activity className="mr-2 h-4 w-4" />Test connection</Button><Button size="sm" onClick={() => void runAction(provider, "sync")} disabled={!provider.is_enabled || workingId === provider.id}><Save className="mr-2 h-4 w-4" />Sync now</Button>{provider.provider_type === "the_odds_api" && provider.settings?.sportKey !== "cricket_active" && !providers.some((item) => item.provider_type === "the_odds_api" && item.settings?.sportKey === "cricket_active") && <Button size="sm" variant="outline" onClick={() => void addCricketOdds(provider)} disabled={workingId !== null}><Plus className="mr-2 h-4 w-4" />{workingId === `cricket-${provider.id}` ? "Adding cricket…" : "Add cricket odds"}</Button>}</div>
                   </div>
                 ))}
               </CardContent>
