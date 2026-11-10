@@ -113,16 +113,23 @@ export function MobileBetSlipDrawer({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
+        className="fixed inset-0 z-[80] bg-background/80 backdrop-blur-sm lg:hidden"
         onClick={onClose}
       />
 
       {/* Drawer */}
-      <div className="fixed inset-x-0 bottom-0 z-50 max-h-[calc(100dvh-4rem)] w-screen max-w-full touch-pan-y overflow-x-hidden bg-surface border-t border-border shadow-2xl lg:hidden animate-in slide-in-from-bottom duration-300">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Mobile bet slip"
+        className="fixed inset-x-0 bottom-0 z-[90] flex max-h-[calc(100dvh-0.5rem)] w-screen max-w-full flex-col overflow-hidden rounded-t-2xl border-t border-border bg-surface shadow-2xl animate-in slide-in-from-bottom duration-300 lg:hidden"
+      >
         {/* Handle */}
         <button
+          type="button"
+          aria-expanded={isExpanded}
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full flex items-center justify-between px-4 py-2 border-b border-border bg-surface/50"
+          className="flex w-full shrink-0 items-center justify-between border-b border-border bg-surface/50 px-4 py-2"
         >
           <div className="flex items-center gap-2">
             <Receipt className="h-4 w-4 text-primary" />
@@ -157,7 +164,8 @@ export function MobileBetSlipDrawer({
 
         {/* Content */}
         {isExpanded && (
-          <div className="max-h-[calc(100dvh-7rem)] min-h-0 min-w-0 touch-pan-y overflow-y-auto overflow-x-hidden overscroll-y-contain flex flex-col [-webkit-overflow-scrolling:touch]">
+          <>
+          <div className="min-h-0 min-w-0 flex-1 touch-pan-y overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]">
             {selections.length === 0 ? (
               /* Empty State */
               <div className="flex items-center justify-center p-8">
@@ -211,7 +219,7 @@ export function MobileBetSlipDrawer({
                 )}
 
                 {/* Selections */}
-                <div className="max-h-[30dvh] min-h-0 shrink-0 touch-pan-y overflow-y-auto overscroll-y-contain custom-scrollbar [-webkit-overflow-scrolling:touch]">
+                <div className="shrink-0">
                   <div className="p-3 space-y-2">
                     {selections.map((selection) => (
                       <div
@@ -250,7 +258,7 @@ export function MobileBetSlipDrawer({
                 </div>
 
                 {/* Stake Input */}
-                <div className="min-w-0 shrink-0 border-t border-border bg-surface p-3 pb-[calc(5.25rem+env(safe-area-inset-bottom))] space-y-2 shadow-[0_-10px_30px_rgba(0,0,0,0.35)]">
+                <div className="min-w-0 shrink-0 space-y-2 border-t border-border bg-surface p-3 pb-4 shadow-[0_-10px_30px_rgba(0,0,0,0.35)]">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                       Stake
@@ -341,25 +349,30 @@ export function MobileBetSlipDrawer({
                     </select>
                   </label>
 
-                  {/* Place Bet Button */}
-                  <Button
-                    className={cn(
-                      "fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-[70] min-h-12 w-auto font-black shadow-2xl text-sm",
-                      "bg-primary hover:bg-primary/90 active:scale-[0.98]",
-                      "disabled:opacity-50"
-                    )}
-                    onClick={handlePlaceBet}
-                    disabled={isPlacing || !stake || parseFloat(stake) <= 0 || parseFloat(stake) > balance || (betType === "system" && selections.length < 3)}
-                  >
-                    {isPlacing ? "Placing…" : "Place Bet"}
-                  </Button>
-                  {placeError && (
-                    <p className="text-xs text-danger text-center">{placeError}</p>
-                  )}
                 </div>
               </>
             )}
           </div>
+          {selections.length > 0 && (
+            <div className="shrink-0 border-t border-border bg-surface px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-12px_30px_rgba(0,0,0,0.4)]">
+              {placeError && (
+                <p className="mb-2 text-center text-xs text-danger">{placeError}</p>
+              )}
+              <Button
+                type="button"
+                className={cn(
+                  "min-h-12 w-full text-sm font-black shadow-2xl",
+                  "bg-primary hover:bg-primary/90 active:scale-[0.98]",
+                  "disabled:opacity-50"
+                )}
+                onClick={handlePlaceBet}
+                disabled={isPlacing || !stake || parseFloat(stake) <= 0 || parseFloat(stake) > balance || (betType === "system" && selections.length < 3)}
+              >
+                {isPlacing ? "Placing…" : "Place Bet"}
+              </Button>
+            </div>
+          )}
+          </>
         )}
       </div>
     </>
