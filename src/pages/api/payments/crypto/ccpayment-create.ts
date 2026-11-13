@@ -157,8 +157,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       price: amount.toFixed(2),
       priceFiatId: fiatId,
       buyerEmail: authData.user.email || undefined,
-      returnUrl: `${root}/wallet?payment=ccpayment`,
-      closeUrl: `${root}/wallet`,
+      returnUrl: `${root}/account/wallet?payment=ccpayment`,
+      closeUrl: `${root}/account/wallet`,
       notifyUrl: `${root}/api/payments/crypto/ccpayment-webhook`,
       expiredAt: Math.floor(expiresAt.getTime() / 1000),
     });

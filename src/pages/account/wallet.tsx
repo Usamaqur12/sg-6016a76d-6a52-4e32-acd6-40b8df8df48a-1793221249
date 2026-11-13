@@ -82,7 +82,13 @@ export default function WalletPage() {
   const [withdrawalSubmitting, setWithdrawalSubmitting] = useState(false);
   const [withdrawalMessage, setWithdrawalMessage] = useState("");
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
-  const providerMethodEnabled = paymentMethods.some((method) => method.method_type === "provider" && method.provider_code === "nowpayments");
+  const activeProviderMethod = paymentMethods.find(
+    (method) => method.method_type === "provider" && method.provider_code === "ccpayment"
+  ) || paymentMethods.find(
+    (method) => method.method_type === "provider" && method.provider_code === "nowpayments"
+  );
+  const activeProviderCode = activeProviderMethod?.provider_code;
+  const providerMethodEnabled = Boolean(activeProviderMethod);
   const cryptoEnabled = process.env.NEXT_PUBLIC_CRYPTO_DEPOSITS_ENABLED === "true" && providerMethodEnabled;
   const manualMethods = paymentMethods.filter((method) => method.method_type !== "provider");
   const accountActivated = Boolean(profile && profile.account_status !== "closed" && !profile.is_suspended);
@@ -198,10 +204,15 @@ export default function WalletPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Please sign in again.");
-      const response = await fetch("/api/payments/crypto/create", {
+      const isCCPayment = activeProviderCode === "ccpayment";
+      const response = await fetch(isCCPayment ? "/api/payments/crypto/ccpayment-create" : "/api/payments/crypto/create", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ amount, payCurrency: depositCurrency, idempotencyKey: globalThis.crypto.randomUUID() }),
+        body: JSON.stringify({
+          amount,
+          ...(isCCPayment ? {} : { payCurrency: depositCurrency }),
+          idempotencyKey: globalThis.crypto.randomUUID(),
+        }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Deposit invoice could not be created.");
@@ -355,7 +366,63 @@ export default function WalletPage() {
           <Card className="surface mb-6 border-primary/20">
             <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Bitcoin className="h-5 w-5 text-primary" />Crypto Deposit</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              {!cryptoEnabled ? <div className="rounded-lg border border-warning/30 bg-warning/5 p-4"><p className="font-medium">Provider connection prepared but not activated</p><p className="mt-1 text-sm text-muted-foreground">Crypto deposits will open after the licensed merchant account, signed webhook, merchant compliance and reconciliation checks are approved. No wallet address is generated while disabled.</p></div> : !accountActivated ? <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">Account activation is required before creating a crypto deposit invoice.</div> : cryptoInvoice ? <div className="grid gap-4"><div className="rounded-lg border border-success/30 bg-success/5 p-4"><div className="text-xs uppercase text-muted-foreground">Send exactly</div><div className="mt-1 text-2xl font-bold font-mono">{cryptoInvoice.pay_amount} {String(cryptoInvoice.pay_currency).toUpperCase()}</div><div className="mt-3 text-xs uppercase text-muted-foreground">Provider deposit address</div><div className="mt-1 flex gap-2"><Input readOnly value={cryptoInvoice.pay_address || ""} className="font-mono text-xs" /><Button variant="outline" size="icon" onClick={() => void navigator.clipboard.writeText(cryptoInvoice.pay_address || "")}><Copy className="h-4 w-4" /></Button></div><p className="mt-3 text-xs text-muted-foreground">The wallet is credited only after the provider reports a completed blockchain payment. Sending a different asset or network may permanently lose funds.</p></div><Button variant="outline" onClick={() => setCryptoInvoice(null)}>Create another invoice</Button></div> : <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><div className="grid gap-2"><Label htmlFor="deposit-amount">USD amount</Label><Input id="deposit-amount" type="number" min="10" max="100000" step="0.01" value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)} /></div><div className="grid gap-2"><Label>Cryptocurrency / network</Label><Select value={depositCurrency} onValueChange={setDepositCurrency}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="usdttrc20">USDT · TRON</SelectItem><SelectItem value="usdtbsc">USDT · BSC</SelectItem><SelectItem value="btc">Bitcoin</SelectItem><SelectItem value="eth">Ethereum</SelectItem><SelectItem value="ltc">Litecoin</SelectItem></SelectContent></Select></div><Button disabled={creatingDeposit} onClick={() => void createCryptoDeposit()}>{creatingDeposit ? "Creating…" : "Create invoice"}</Button></div>}
+              {!cryptoEnabled ? (
+                <div className="rounded-lg border border-warning/30 bg-warning/5 p-4">
+                  <p className="font-medium">Provider connection prepared but not activated</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Crypto deposits will open after the licensed merchant account, signed webhook, merchant compliance and reconciliation checks are approved. No wallet address is generated while disabled.</p>
+                </div>
+              ) : !accountActivated ? (
+                <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">Account activation is required before creating a crypto deposit invoice.</div>
+              ) : cryptoInvoice ? (
+                <div className="grid gap-4">
+                  {cryptoInvoice.checkout_url ? (
+                    <div className="rounded-lg border border-success/30 bg-success/5 p-4">
+                      <div className="text-xs uppercase text-muted-foreground">CCPayment secure checkout</div>
+                      <p className="mt-2 text-sm text-muted-foreground">Choose a supported coin and network on CCPayment. Your wallet is credited only after the payment is confirmed and reconciled.</p>
+                      <Button className="mt-4 w-full" onClick={() => window.location.assign(cryptoInvoice.checkout_url)}>
+                        Continue to CCPayment
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-success/30 bg-success/5 p-4">
+                      <div className="text-xs uppercase text-muted-foreground">Send exactly</div>
+                      <div className="mt-1 text-2xl font-bold font-mono">{cryptoInvoice.pay_amount} {String(cryptoInvoice.pay_currency).toUpperCase()}</div>
+                      <div className="mt-3 text-xs uppercase text-muted-foreground">Provider deposit address</div>
+                      <div className="mt-1 flex gap-2">
+                        <Input readOnly value={cryptoInvoice.pay_address || ""} className="font-mono text-xs" />
+                        <Button variant="outline" size="icon" onClick={() => void navigator.clipboard.writeText(cryptoInvoice.pay_address || "")}><Copy className="h-4 w-4" /></Button>
+                      </div>
+                      <p className="mt-3 text-xs text-muted-foreground">The wallet is credited only after the provider reports a completed blockchain payment. Sending a different asset or network may permanently lose funds.</p>
+                    </div>
+                  )}
+                  <Button variant="outline" onClick={() => setCryptoInvoice(null)}>Create another invoice</Button>
+                </div>
+              ) : (
+                <div className={`grid gap-4 ${activeProviderCode === "ccpayment" ? "sm:grid-cols-[1fr_auto]" : "sm:grid-cols-[1fr_1fr_auto]"} sm:items-end`}>
+                  <div className="grid gap-2">
+                    <Label htmlFor="deposit-amount">USD amount</Label>
+                    <Input id="deposit-amount" type="number" min="10" max="100000" step="0.01" value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)} />
+                  </div>
+                  {activeProviderCode !== "ccpayment" && (
+                    <div className="grid gap-2">
+                      <Label>Cryptocurrency / network</Label>
+                      <Select value={depositCurrency} onValueChange={setDepositCurrency}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="usdttrc20">USDT · TRON</SelectItem>
+                          <SelectItem value="usdtbsc">USDT · BSC</SelectItem>
+                          <SelectItem value="btc">Bitcoin</SelectItem>
+                          <SelectItem value="eth">Ethereum</SelectItem>
+                          <SelectItem value="ltc">Litecoin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <Button disabled={creatingDeposit} onClick={() => void createCryptoDeposit()}>
+                    {creatingDeposit ? "Creating…" : activeProviderCode === "ccpayment" ? "Continue to Secure Checkout" : "Create invoice"}
+                  </Button>
+                </div>
+              )}
               {depositError && <p className="text-sm text-destructive">{depositError}</p>}
             </CardContent>
           </Card>

@@ -141,7 +141,8 @@ export default function AdminPayments() {
   useEffect(() => { void initialize(); }, [initialize]);
 
   const pendingCount = useMemo(() => requests.filter((item) => item.status === "pending").length + withdrawals.filter((item) => item.status === "pending").length, [requests, withdrawals]);
-  const ccPaymentMethod = methods.find((item) => item.method_type === "provider" && item.provider_code === "ccpayment");
+  const ccPaymentMethod = methods.find((item) => item.method_type === "provider" && item.provider_code === "ccpayment")
+    || methods.find((item) => item.code === "ccpayment");
 
   function startEdit(method: PaymentMethod) {
     setEditingId(method.id);
@@ -199,10 +200,17 @@ export default function AdminPayments() {
   }
 
   async function toggleMethod(method: PaymentMethod) {
+    const isCCPayment = method.code === "ccpayment" || method.provider_code === "ccpayment";
     const nextForm = {
-      name: method.name, code: method.code, methodType: method.method_type, providerCode: method.provider_code || "",
-      currency: method.currency, network: method.network || "", destination: method.destination_reference || "",
-      instructions: method.instructions || "", minAmount: String(method.min_amount), maxAmount: String(method.max_amount),
+      name: isCCPayment ? "CCPayment Crypto Checkout" : method.name,
+      code: method.code,
+      methodType: isCCPayment ? "provider" as MethodType : method.method_type,
+      providerCode: isCCPayment ? "ccpayment" : method.provider_code || "",
+      currency: isCCPayment ? "USD" : method.currency,
+      network: isCCPayment ? "Multi-chain" : method.network || "",
+      destination: isCCPayment ? "" : method.destination_reference || "",
+      instructions: isCCPayment ? "Choose your coin and network on the secure CCPayment checkout page." : method.instructions || "",
+      minAmount: String(method.min_amount), maxAmount: String(method.max_amount),
       displayOrder: String(method.display_order), enabled: !method.is_enabled,
     };
     await saveMethod(nextForm, method.id);
