@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { SportsbookEvent, SportsbookOutcome } from "@/types/sportsbook";
+import { outcomeDisplayName } from "@/lib/sportsbookSelection";
 
 type ProfileSummary = { balance: number };
 
@@ -173,7 +174,13 @@ export default function Sports() {
       const key = `${event.sport}|${event.league}`;
       groups.set(key, [...(groups.get(key) || []), event]);
     }
-    return [...groups.entries()];
+    return [...groups.entries()].sort(([leftKey], [rightKey]) => {
+      const leftSport = leftKey.split("|")[0].toLowerCase();
+      const rightSport = rightKey.split("|")[0].toLowerCase();
+      if (leftSport === "cricket" && rightSport !== "cricket") return -1;
+      if (rightSport === "cricket" && leftSport !== "cricket") return 1;
+      return leftKey.localeCompare(rightKey);
+    });
   }, [visibleEvents]);
 
   const selectedOdds = useMemo(
@@ -191,6 +198,7 @@ export default function Sports() {
       league: event.league,
       market: marketName,
       selection: outcome.selection,
+      displaySelection: outcomeDisplayName(event, outcome.selection),
       odds: outcome.value,
     });
   }
@@ -375,7 +383,7 @@ export default function Sports() {
         selections={betSlip.bets.map((bet) => ({
           id: bet.id,
           eventName: bet.event,
-          selection: bet.selection,
+          selection: bet.displaySelection || bet.selection,
           odds: bet.odds,
           market: bet.market || "Match Result",
         }))}

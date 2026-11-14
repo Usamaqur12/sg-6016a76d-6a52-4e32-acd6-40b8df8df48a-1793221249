@@ -4,6 +4,7 @@ import { CountryFlag } from "@/components/ui/CountryFlag";
 import { SportsEntityBadge } from "@/components/ui/SportsEntityBadge";
 import { cn } from "@/lib/utils";
 import type { SportsbookOutcome } from "@/types/sportsbook";
+import { outcomeDisplayName } from "@/lib/sportsbookSelection";
 
 interface EventRowProps {
   event: {
@@ -42,8 +43,15 @@ export function EventRow({
   onToggleFavorite,
   onOpenMarkets,
 }: EventRowProps) {
-  const isSelected = (eventName: string, selection: string) => {
-    return selectedOdds.has(`${eventName}-${selection}`);
+  const homeLabel = outcomeDisplayName(event, event.outcomes?.Home?.selection || "Home");
+  const drawLabel = outcomeDisplayName(event, event.outcomes?.Draw?.selection || "Draw");
+  const awayLabel = outcomeDisplayName(event, event.outcomes?.Away?.selection || "Away");
+  const isSelected = (outcome: SportsbookOutcome | undefined, selection: string) => {
+    return Boolean(outcome && (
+      selectedOdds.has(outcome.id)
+      || selectedOdds.has(`${event.homeTeam} vs ${event.awayTeam}-${outcome.selection}`)
+      || selectedOdds.has(`${event.homeTeam} vs ${event.awayTeam}-${selection}`)
+    ));
   };
 
   return (
@@ -144,51 +152,61 @@ export function EventRow({
             <div className="grid min-w-0 flex-1 grid-cols-3 gap-1 lg:flex lg:flex-none lg:items-center">
               <button
                 onClick={() => onOddsClick("Home", event.homeOdds, event.outcomes?.Home)}
+                title={`Bet on ${homeLabel}`}
                 className={cn(
-                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
-                  isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Home") && "odds-button-selected"
+                  "odds-button flex w-full min-w-0 flex-col items-center lg:w-24",
+                  isSelected(event.outcomes?.Home, "Home") && "odds-button-selected"
                 )}
               >
-                {event.homeOdds.toFixed(2)}
+                <span className="w-full truncate text-[9px] font-sans font-semibold text-subtle-foreground">{homeLabel}</span>
+                <span>{event.homeOdds.toFixed(2)}</span>
               </button>
               <button
                 onClick={() => onOddsClick("Draw", event.drawOdds, event.outcomes?.Draw)}
+                title={`Bet on ${drawLabel}`}
                 className={cn(
-                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
-                  isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Draw") && "odds-button-selected"
+                  "odds-button flex w-full min-w-0 flex-col items-center lg:w-20",
+                  isSelected(event.outcomes?.Draw, "Draw") && "odds-button-selected"
                 )}
               >
-                {event.drawOdds.toFixed(2)}
+                <span className="w-full truncate text-[9px] font-sans font-semibold text-subtle-foreground">{drawLabel}</span>
+                <span>{event.drawOdds.toFixed(2)}</span>
               </button>
               <button
                 onClick={() => onOddsClick("Away", event.awayOdds, event.outcomes?.Away)}
+                title={`Bet on ${awayLabel}`}
                 className={cn(
-                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
-                  isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Away") && "odds-button-selected"
+                  "odds-button flex w-full min-w-0 flex-col items-center lg:w-24",
+                  isSelected(event.outcomes?.Away, "Away") && "odds-button-selected"
                 )}
               >
-                {event.awayOdds.toFixed(2)}
+                <span className="w-full truncate text-[9px] font-sans font-semibold text-subtle-foreground">{awayLabel}</span>
+                <span>{event.awayOdds.toFixed(2)}</span>
               </button>
             </div>
           ) : (
             <div className="grid min-w-0 flex-1 grid-cols-2 gap-1 lg:flex lg:flex-none lg:items-center">
               <button
                 onClick={() => onOddsClick("Home", event.homeOdds, event.outcomes?.Home)}
+                title={`Bet on ${homeLabel}`}
                 className={cn(
-                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
-                  isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Home") && "odds-button-selected"
+                  "odds-button flex w-full min-w-0 flex-col items-center lg:w-28",
+                  isSelected(event.outcomes?.Home, "Home") && "odds-button-selected"
                 )}
               >
-                {event.homeOdds?.toFixed(2)}
+                <span className="w-full truncate text-[9px] font-sans font-semibold text-subtle-foreground">{homeLabel}</span>
+                <span>{event.homeOdds?.toFixed(2)}</span>
               </button>
               <button
                 onClick={() => onOddsClick("Away", event.awayOdds, event.outcomes?.Away)}
+                title={`Bet on ${awayLabel}`}
                 className={cn(
-                  "odds-button w-full min-w-0 lg:w-auto lg:min-w-[60px]",
-                  isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Away") && "odds-button-selected"
+                  "odds-button flex w-full min-w-0 flex-col items-center lg:w-28",
+                  isSelected(event.outcomes?.Away, "Away") && "odds-button-selected"
                 )}
               >
-                {event.awayOdds?.toFixed(2)}
+                <span className="w-full truncate text-[9px] font-sans font-semibold text-subtle-foreground">{awayLabel}</span>
+                <span>{event.awayOdds?.toFixed(2)}</span>
               </button>
             </div>
           )}

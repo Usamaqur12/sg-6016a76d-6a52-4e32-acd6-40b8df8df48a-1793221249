@@ -8,6 +8,7 @@ import { CountryFlag } from "@/components/ui/CountryFlag";
 import { SportsEntityBadge } from "@/components/ui/SportsEntityBadge";
 import type { SportsbookMarket, SportsbookOutcome } from "@/types/sportsbook";
 import { supabase } from "@/integrations/supabase/client";
+import { outcomeDisplayName } from "@/lib/sportsbookSelection";
 
 type TimelineItem = { id: string; incident_type: string; match_minute: number | null; team_side: string | null; score_home: number | null; score_away: number | null; description: string | null; created_at: string };
 type EventStatistics = { home_stats?: Record<string, number>; away_stats?: Record<string, number>; provider_updated_at?: string | null; updated_at?: string | null; [key: string]: unknown };
@@ -144,7 +145,7 @@ export function EventMarketsModal({
                           onClick={() => onOddsClick(outcome.selection, outcome.value, outcome, market)}
                           className={`odds-button p-3 text-left ${selected ? "odds-button-selected" : ""}`}
                         >
-                          <div className="text-sm font-medium mb-1">{outcome.selection}</div>
+                          <div className="text-sm font-medium mb-1">{outcomeDisplayName(event, outcome.selection)}</div>
                           <div className="font-mono font-bold text-lg">{outcome.value.toFixed(2)}</div>
                         </button>
                       );

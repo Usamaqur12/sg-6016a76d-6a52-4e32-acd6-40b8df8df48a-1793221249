@@ -226,7 +226,7 @@ export function BetSlip() {
                     </button>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold">{bet.selection}</span>
+                    <span className="text-xs font-semibold">{bet.displaySelection || bet.selection}</span>
                     <span className="text-xs font-mono font-bold text-primary">{bet.odds.toFixed(2)}</span>
                   </div>
                 </div>

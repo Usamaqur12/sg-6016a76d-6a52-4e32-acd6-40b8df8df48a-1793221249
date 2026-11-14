@@ -25,6 +25,7 @@ import { getUserFavoriteEventIds, toggleFavorite as persistFavorite } from "@/se
 import { getMyWalletBalances } from "@/services/walletService";
 import { LiveOddsFeed } from "@/components/sportsbook/LiveOddsFeed";
 import { SEO } from "@/components/SEO";
+import { outcomeDisplayName } from "@/lib/sportsbookSelection";
 
 type ProfileSummary = {
   balance: number;
@@ -90,6 +91,7 @@ export default function Home() {
       league: event.league,
       market: marketName,
       selection: outcome.selection,
+      displaySelection: outcomeDisplayName(event, outcome.selection),
       odds: outcome.value,
     });
   }
@@ -468,7 +470,7 @@ export default function Home() {
         selections={betSlip.bets.map((bet) => ({
           id: bet.id,
           eventName: bet.event,
-          selection: bet.selection,
+          selection: bet.displaySelection || bet.selection,
           odds: bet.odds,
           market: bet.market || "Match Result",
         }))}

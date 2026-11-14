@@ -22,8 +22,8 @@ type ActiveSport = {
 };
 
 const configuredSports = [
-  { id: "football", name: "Football", icon: "⚽" },
   { id: "cricket", name: "Cricket", icon: "🏏" },
+  { id: "football", name: "Football", icon: "⚽" },
   { id: "tennis", name: "Tennis", icon: "🎾" },
   { id: "basketball", name: "Basketball", icon: "🏀" },
   { id: "esports", name: "Esports", icon: "🎮" },
@@ -50,7 +50,7 @@ const sportIcons: Record<string, string> = {
 
 export function SportsNav() {
   const router = useRouter();
-  const [expandedSports, setExpandedSports] = useState<string[]>(["football"]);
+  const [expandedSports, setExpandedSports] = useState<string[]>(["cricket"]);
   const [sports, setSports] = useState<ActiveSport[]>(emptyConfiguredSports);
   const [loading, setLoading] = useState(true);
 

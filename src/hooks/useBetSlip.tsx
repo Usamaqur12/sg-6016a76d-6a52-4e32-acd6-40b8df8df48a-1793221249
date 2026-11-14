@@ -10,6 +10,7 @@ interface Bet {
   league: string;
   market?: string;
   selection: string;
+  displaySelection?: string;
   odds: number;
 }
 

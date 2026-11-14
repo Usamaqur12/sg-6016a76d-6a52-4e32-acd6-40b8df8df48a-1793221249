@@ -2,6 +2,7 @@ import { Star, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { SportsbookOutcome } from "@/types/sportsbook";
+import { outcomeDisplayName } from "@/lib/sportsbookSelection";
 
 interface EventCardProps {
   event: {
@@ -34,8 +35,15 @@ export function EventCard({
   onToggleFavorite,
   onOpenMarkets,
 }: EventCardProps) {
-  const isSelected = (eventName: string, selection: string) => {
-    return selectedOdds.has(`${eventName}-${selection}`);
+  const homeLabel = outcomeDisplayName(event, event.outcomes?.Home?.selection || "Home");
+  const drawLabel = outcomeDisplayName(event, event.outcomes?.Draw?.selection || "Draw");
+  const awayLabel = outcomeDisplayName(event, event.outcomes?.Away?.selection || "Away");
+  const isSelected = (outcome: SportsbookOutcome | undefined, selection: string) => {
+    return Boolean(outcome && (
+      selectedOdds.has(outcome.id)
+      || selectedOdds.has(`${event.homeTeam} vs ${event.awayTeam}-${outcome.selection}`)
+      || selectedOdds.has(`${event.homeTeam} vs ${event.awayTeam}-${selection}`)
+    ));
   };
 
   return (
@@ -98,30 +106,30 @@ export function EventCard({
               onClick={() => onOddsClick("Home", event.homeOdds, event.outcomes?.Home)}
               className={cn(
                 "odds-button flex flex-col items-center py-2",
-                isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Home") && "odds-button-selected"
+                isSelected(event.outcomes?.Home, "Home") && "odds-button-selected"
               )}
             >
-              <span className="text-[9px] text-subtle-foreground font-bold mb-0.5">1</span>
+              <span className="w-full truncate text-[9px] text-subtle-foreground font-bold mb-0.5">{homeLabel}</span>
               <span className="text-sm font-mono font-bold">{event.homeOdds.toFixed(2)}</span>
             </button>
             <button
               onClick={() => onOddsClick("Draw", event.drawOdds, event.outcomes?.Draw)}
               className={cn(
                 "odds-button flex flex-col items-center py-2",
-                isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Draw") && "odds-button-selected"
+                isSelected(event.outcomes?.Draw, "Draw") && "odds-button-selected"
               )}
             >
-              <span className="text-[9px] text-subtle-foreground font-bold mb-0.5">X</span>
+              <span className="w-full truncate text-[9px] text-subtle-foreground font-bold mb-0.5">{drawLabel}</span>
               <span className="text-sm font-mono font-bold">{event.drawOdds.toFixed(2)}</span>
             </button>
             <button
               onClick={() => onOddsClick("Away", event.awayOdds, event.outcomes?.Away)}
               className={cn(
                 "odds-button flex flex-col items-center py-2",
-                isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Away") && "odds-button-selected"
+                isSelected(event.outcomes?.Away, "Away") && "odds-button-selected"
               )}
             >
-              <span className="text-[9px] text-subtle-foreground font-bold mb-0.5">2</span>
+              <span className="w-full truncate text-[9px] text-subtle-foreground font-bold mb-0.5">{awayLabel}</span>
               <span className="text-sm font-mono font-bold">{event.awayOdds.toFixed(2)}</span>
             </button>
           </div>
@@ -131,20 +139,20 @@ export function EventCard({
               onClick={() => onOddsClick("Home", event.homeOdds, event.outcomes?.Home)}
               className={cn(
                 "odds-button flex flex-col items-center py-2",
-                isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Home") && "odds-button-selected"
+                isSelected(event.outcomes?.Home, "Home") && "odds-button-selected"
               )}
             >
-              <span className="text-[9px] text-subtle-foreground font-bold mb-0.5">Home</span>
+              <span className="w-full truncate text-[9px] text-subtle-foreground font-bold mb-0.5">{homeLabel}</span>
               <span className="text-sm font-mono font-bold">{event.homeOdds?.toFixed(2)}</span>
             </button>
             <button
               onClick={() => onOddsClick("Away", event.awayOdds, event.outcomes?.Away)}
               className={cn(
                 "odds-button flex flex-col items-center py-2",
-                isSelected(`${event.homeTeam} vs ${event.awayTeam}`, "Away") && "odds-button-selected"
+                isSelected(event.outcomes?.Away, "Away") && "odds-button-selected"
               )}
             >
-              <span className="text-[9px] text-subtle-foreground font-bold mb-0.5">Away</span>
+              <span className="w-full truncate text-[9px] text-subtle-foreground font-bold mb-0.5">{awayLabel}</span>
               <span className="text-sm font-mono font-bold">{event.awayOdds?.toFixed(2)}</span>
             </button>
           </div>
