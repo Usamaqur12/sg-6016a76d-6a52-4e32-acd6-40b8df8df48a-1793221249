@@ -229,7 +229,7 @@ export default function CasinoPage() {
     );
   };
 
-  const displayedGames = providerGames.length ? providerGames : casinoGames;
+  // MindBet Mines is always available. Never fall back to the old preview-only\n  // casino catalogue; licensed provider games are appended only when enabled.\n  const displayedGames = providerGames.length\n    ? [casinoGames[0], ...providerGames]\n    : [casinoGames[0]];
   const filteredGames = category === "all" 
     ? displayedGames
     : displayedGames.filter(game => game.category === category);
