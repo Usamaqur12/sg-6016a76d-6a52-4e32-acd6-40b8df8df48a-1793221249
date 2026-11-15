@@ -80,12 +80,16 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
         const role = profile.admin_role || "admin";
         const requiredAccess = ADMIN_ROUTE_ACCESS[router.pathname];
 
+        const gameControlRoute =
+          router.pathname === "/admin/mines" || router.pathname === "/admin/spinner";
         const denied =
-          requiredAccess === "super_admin"
-            ? role !== "super_admin"
-            : requiredAccess
-              ? !hasAdminAccess(role, requiredAccess)
-              : router.pathname.startsWith("/admin/") && router.pathname !== "/admin/login" && role !== "super_admin";
+          gameControlRoute && !["super_admin", "admin"].includes(role)
+            ? true
+            : requiredAccess === "super_admin"
+              ? role !== "super_admin"
+              : requiredAccess
+                ? !hasAdminAccess(role, requiredAccess)
+                : router.pathname.startsWith("/admin/") && router.pathname !== "/admin/login" && role !== "super_admin";
 
         if (denied) {
           toast({
@@ -156,6 +160,11 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   const navItems = allNavItems.filter(item => {
     // Super admin only items
     if (item.superAdminOnly) return adminRole === "super_admin";
+
+    if (
+      (item.href === "/admin/mines" || item.href === "/admin/spinner") &&
+      !["super_admin", "admin"].includes(adminRole)
+    ) return false;
 
     if (adminRole === "super_admin") return true;
 
