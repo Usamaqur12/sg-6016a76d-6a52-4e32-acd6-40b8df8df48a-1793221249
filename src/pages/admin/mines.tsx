@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, Bomb, DollarSign, Gauge, Save, ShieldCheck, WalletCards } from "lucide-react";
+import { Activity, Bomb, DollarSign, Download, Gauge, Save, ShieldCheck, WalletCards } from "lucide-react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -107,6 +107,34 @@ export default function MinesAdminPage() {
     setForm((current) => ({ ...current, [key]: Number(value) }));
   }
 
+  function exportRounds() {
+    const rounds = dashboard?.recent_rounds || [];
+    if (!rounds.length) {
+      toast({ title: "No Mines rounds to export" });
+      return;
+    }
+    const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = [
+      ["round_id", "created_at", "status", "stake", "mines", "multiplier", "payout"],
+      ...rounds.map((round) => [
+        round.id,
+        round.created_at,
+        round.status,
+        round.stake,
+        round.mine_count,
+        round.multiplier,
+        round.payout,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(escape).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `mindbet-mines-rounds-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function save() {
     setSaving(true);
     const payload = {
@@ -208,7 +236,13 @@ export default function MinesAdminPage() {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle>Recent Mines rounds</CardTitle></CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between gap-3">
+                <CardTitle>Recent Mines rounds</CardTitle>
+                <Button size="sm" variant="outline" onClick={exportRounds} disabled={!dashboard?.recent_rounds.length}>
+                  <Download className="mr-2 h-4 w-4" />
+                  CSV
+                </Button>
+              </CardHeader>
               <CardContent className="space-y-2">
                 {loading ? (
                   <p className="text-sm text-muted-foreground">Loading rounds…</p>
