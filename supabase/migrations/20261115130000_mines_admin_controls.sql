@@ -409,13 +409,19 @@ BEGIN
         completed_at = NOW()
     WHERE id = v_game.id;
 
-    SELECT COALESCE(SUM(balance), 0)
-    INTO v_available
+    PERFORM 1
     FROM public.ledger_accounts
     WHERE user_id = v_user
       AND currency = 'USD'
       AND account_code IN ('cash', 'bonus')
     FOR UPDATE;
+
+    SELECT COALESCE(SUM(balance), 0)
+    INTO v_available
+    FROM public.ledger_accounts
+    WHERE user_id = v_user
+      AND currency = 'USD'
+      AND account_code IN ('cash', 'bonus');
 
     INSERT INTO public.wallet_transactions(
       user_id, type, amount, balance_before, balance_after,
@@ -475,13 +481,19 @@ BEGIN
       completed_at = NOW()
   WHERE id = v_game.id;
 
-  SELECT COALESCE(SUM(balance), 0)
-  INTO v_available
+  PERFORM 1
   FROM public.ledger_accounts
   WHERE user_id = v_user
     AND currency = 'USD'
     AND account_code IN ('cash', 'bonus')
   FOR UPDATE;
+
+  SELECT COALESCE(SUM(balance), 0)
+  INTO v_available
+  FROM public.ledger_accounts
+  WHERE user_id = v_user
+    AND currency = 'USD'
+    AND account_code IN ('cash', 'bonus');
 
   INSERT INTO public.wallet_transactions(
     user_id, type, amount, balance_before, balance_after,
