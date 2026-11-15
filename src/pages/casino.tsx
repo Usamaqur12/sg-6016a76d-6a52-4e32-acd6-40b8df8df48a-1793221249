@@ -23,6 +23,15 @@ const casinoGames = [
     new: true,
   },
   {
+    id: -101,
+    name: "MindBet Spinner",
+    provider: "MindBet Originals",
+    category: "table",
+    image: "🎡",
+    popular: true,
+    new: true,
+  },
+  {
     id: 1,
     name: "Mega Fortune",
     provider: "NetEnt",
@@ -206,6 +215,10 @@ export default function CasinoPage() {
       await router.push("/casino/mines");
       return;
     }
+    if (gameId === -101) {
+      await router.push("/casino/spinner");
+      return;
+    }
     if (!casinoEnabled || typeof gameId === "number") {
       alert("Casino game launch requires licensed provider setup. Contact support for activation.");
       return;
@@ -231,9 +244,10 @@ export default function CasinoPage() {
 
   // MindBet Mines is always available. Never fall back to the old preview-only
   // casino catalogue; licensed provider games are appended only when enabled.
+  const originalGames = casinoGames.filter((game) => game.id < 0);
   const displayedGames = providerGames.length
-    ? [casinoGames[0], ...providerGames]
-    : [casinoGames[0]];
+    ? [...originalGames, ...providerGames]
+    : originalGames;
   const filteredGames = category === "all" 
     ? displayedGames
     : displayedGames.filter(game => game.category === category);
