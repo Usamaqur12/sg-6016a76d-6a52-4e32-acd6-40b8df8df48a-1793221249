@@ -56,9 +56,21 @@ type MinesSettings = {
   max_payout: number;
 };
 
+type MinesHistoryRound = {
+  id: string;
+  stake: number;
+  mine_count: number;
+  status: "lost" | "cashed_out";
+  multiplier: number;
+  payout: number;
+  created_at: string;
+  completed_at: string | null;
+};
+
 type MinesState = {
   game: MinesGame | null;
   settings: MinesSettings;
+  history: MinesHistoryRound[];
 };
 
 const DEFAULT_SETTINGS: MinesSettings = {
@@ -103,6 +115,8 @@ export default function MinesPage() {
   const [state, setState] = useState<MinesState | null>(null);
   const [balance, setBalance] = useState(0);
   const [stake, setStake] = useState("10");
+  const [lastStake, setLastStake] = useState("10");
+  const [autoCashoutTiles, setAutoCashoutTiles] = useState("0");
   const [mineCount, setMineCount] = useState(DEFAULT_SETTINGS.min_mines);
   const [clientSeed, setClientSeed] = useState("");
   const [busy, setBusy] = useState(false);
@@ -152,7 +166,7 @@ export default function MinesPage() {
       if (!mounted) return;
       setUser(sessionUser);
       if (!sessionUser) {
-        setState({ game: null, settings: DEFAULT_SETTINGS });
+        setState({ game: null, settings: DEFAULT_SETTINGS, history: [] });
         setBalance(0);
         setLoading(false);
         setLoadError(null);
@@ -180,6 +194,7 @@ export default function MinesPage() {
   }, [refreshGame]);
 
   const game = state?.game;
+  const history = state?.history || [];
   const active = game?.status === "active";
   const revealed = useMemo(() => new Set(game?.revealed_cells || []), [game?.revealed_cells]);
   const mines = useMemo(() => new Set(game?.mine_positions || []), [game?.mine_positions]);
@@ -209,6 +224,25 @@ export default function MinesPage() {
     settings.max_payout,
     Number(game?.stake || stake || 0) * nextMultiplier,
   );
+
+  const sessionStats = useMemo(
+    () =>
+      history.reduce(
+        (stats, round) => {
+          stats.wager += Number(round.stake || 0);
+          stats.payout += Number(round.payout || 0);
+          if (round.status === "cashed_out") stats.wins += 1;
+          return stats;
+        },
+        { wager: 0, payout: 0, wins: 0 },
+      ),
+    [history],
+  );
+
+  function setClampedStake(value: number) {
+    const next = Math.min(settings.max_stake, Math.max(settings.min_stake, value));
+    setStake(next.toFixed(2).replace(/\.00$/, ""));
+  }
 
   async function startGame() {
     if (!user) {
@@ -266,6 +300,7 @@ export default function MinesPage() {
       });
       if (error) throw error;
       setClientSeed(seed);
+      setLastStake(String(amount));
       setState(data as MinesState);
       toast({
         title: "Mines round started",
@@ -289,7 +324,28 @@ export default function MinesPage() {
     try {
       const { data, error } = await (supabase as any).rpc("mines_pick", { p_cell: cell });
       if (error) throw error;
-      const next = data as MinesState;
+      let next = data as MinesState;
+      const autoTarget = Number(autoCashoutTiles);
+      let autoCashedOut = false;
+
+      if (
+        next.game?.status === "active" &&
+        autoTarget > 0 &&
+        next.game.revealed_cells.length >= autoTarget
+      ) {
+        const autoResult = await (supabase as any).rpc("mines_cashout", {});
+        if (!autoResult.error && autoResult.data) {
+          next = autoResult.data as MinesState;
+          autoCashedOut = true;
+        } else if (autoResult.error) {
+          toast({
+            title: "Auto cash-out failed",
+            description: autoResult.error.message,
+            variant: "destructive",
+          });
+        }
+      }
+
       setState(next);
       if (next.game?.status === "lost") {
         toast({
@@ -297,8 +353,12 @@ export default function MinesPage() {
           description: "The server seed is now available for verification.",
           variant: "destructive",
         });
-      }
-      if (next.game?.status === "cashed_out") {
+      } else if (autoCashedOut) {
+        toast({
+          title: "Auto cash-out complete",
+          description: `${formatUsd(next.game?.payout || 0)} credited.`,
+        });
+      } else if (next.game?.status === "cashed_out") {
         toast({
           title: "Board cleared",
           description: `${formatUsd(next.game.payout)} credited.`,
@@ -490,6 +550,12 @@ export default function MinesPage() {
                         </button>
                       ))}
                     </div>
+                    <div className="mt-2 grid grid-cols-4 gap-2">
+                      <button type="button" disabled={active || busy} onClick={() => setClampedStake(Number(stake || 0) / 2)} className="rounded-lg border border-slate-700 py-2 text-xs font-bold disabled:opacity-50">Half</button>
+                      <button type="button" disabled={active || busy} onClick={() => setClampedStake(Number(stake || 0) * 2)} className="rounded-lg border border-slate-700 py-2 text-xs font-bold disabled:opacity-50">Double</button>
+                      <button type="button" disabled={active || busy} onClick={() => setClampedStake(Math.min(balance, settings.max_stake))} className="rounded-lg border border-slate-700 py-2 text-xs font-bold disabled:opacity-50">Max</button>
+                      <button type="button" disabled={active || busy} onClick={() => setClampedStake(Number(lastStake || settings.min_stake))} className="rounded-lg border border-slate-700 py-2 text-xs font-bold disabled:opacity-50">Repeat</button>
+                    </div>
                   </div>
 
                   <div>
@@ -513,6 +579,30 @@ export default function MinesPage() {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-[.16em] text-slate-400">
+                      Auto cash-out
+                    </label>
+                    <select
+                      value={autoCashoutTiles}
+                      disabled={active || busy}
+                      onChange={(event) => setAutoCashoutTiles(event.target.value)}
+                      className="mt-2 h-11 w-full rounded-md border border-slate-700 bg-[#07111d] px-3 text-sm font-semibold text-slate-100"
+                    >
+                      <option value="0">Off — cash out manually</option>
+                      {[1, 2, 3, 5, 8, 10]
+                        .filter((count) => count <= 25 - mineCount)
+                        .map((count) => (
+                          <option key={count} value={count}>
+                            After {count} safe {count === 1 ? "tile" : "tiles"}
+                          </option>
+                        ))}
+                    </select>
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      Runs immediately after the selected number of verified safe picks.
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -733,6 +823,36 @@ export default function MinesPage() {
                 </CardContent>
               </Card>
             </div>
+
+            <Card className="border-slate-700/70 bg-[#081421] text-slate-100">
+              <CardContent className="p-4 sm:p-6">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-black">Recent verified rounds</h2>
+                    <p className="text-xs text-slate-500">Your latest completed Mines results from the server ledger.</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-xl border border-slate-700 px-3 py-2 text-center"><p className="text-[9px] uppercase text-slate-500">Wager</p><p className="font-mono text-sm font-bold">{formatUsd(sessionStats.wager)}</p></div>
+                    <div className="rounded-xl border border-slate-700 px-3 py-2 text-center"><p className="text-[9px] uppercase text-slate-500">Payout</p><p className="font-mono text-sm font-bold text-emerald-300">{formatUsd(sessionStats.payout)}</p></div>
+                    <div className="rounded-xl border border-slate-700 px-3 py-2 text-center"><p className="text-[9px] uppercase text-slate-500">Net</p><p className={`font-mono text-sm font-bold ${sessionStats.payout - sessionStats.wager >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{formatUsd(sessionStats.payout - sessionStats.wager)}</p></div>
+                  </div>
+                </div>
+                {history.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">Complete a round to see verified history.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {history.map((round) => (
+                      <div key={round.id} className="grid grid-cols-[1fr_auto] gap-3 rounded-xl border border-slate-700 bg-[#050d17] p-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center">
+                        <div><p className="font-mono text-xs font-bold">#{round.id.slice(0, 8)}</p><p className="text-[10px] text-slate-500">{new Date(round.created_at).toLocaleString()}</p></div>
+                        <Badge variant="outline" className={round.status === "lost" ? "border-rose-400/40 text-rose-300" : "border-emerald-400/40 text-emerald-300"}>{round.status.replace("_", " ")}</Badge>
+                        <span className="font-mono text-xs">{round.mine_count} mines · {Number(round.multiplier || 1).toFixed(2)}x</span>
+                        <span className="font-mono text-sm font-black">{formatUsd(round.payout)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </main>
 
