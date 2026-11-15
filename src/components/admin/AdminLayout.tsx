@@ -39,6 +39,7 @@ const ADMIN_ROUTE_ACCESS: Record<string, RouteRequirement> = {
   "/admin/casino": "casino",
   "/admin/aviator": "casino",
   "/admin/mines": "casino",
+  "/admin/spinner": "casino",
   "/admin/providers": "sports_management",
   "/admin/readiness": "super_admin",
   "/admin/settings": "super_admin",
@@ -146,6 +147,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: "/admin/casino", label: "Casino", icon: Dices, areas: ["casino"] },
     { href: "/admin/aviator", label: "Aviator", icon: TrendingUp, areas: ["casino"] },
     { href: "/admin/mines", label: "Mines", icon: Bomb, areas: ["casino"] },
+    { href: "/admin/spinner", label: "Spinner", icon: Dices, areas: ["casino"] },
     { href: "/admin/providers", label: "Providers", icon: Settings, areas: ["sports_management"] },
     { href: "/admin/readiness", label: "Readiness", icon: CheckCircle, areas: [], superAdminOnly: true },
   ];
