@@ -44,6 +44,11 @@ type MinesGame = {
 };
 
 type MinesSettings = {
+  is_enabled: boolean;
+  is_paused: boolean;
+  maintenance_message: string;
+  house_edge_percent: number;
+  max_user_daily_wager: number;
   min_stake: number;
   max_stake: number;
   min_mines: number;
@@ -57,6 +62,11 @@ type MinesState = {
 };
 
 const DEFAULT_SETTINGS: MinesSettings = {
+  is_enabled: true,
+  is_paused: false,
+  maintenance_message: "Mines is temporarily unavailable",
+  house_edge_percent: 1,
+  max_user_daily_wager: 10000,
   min_stake: 1,
   max_stake: 500,
   min_mines: 3,
@@ -76,13 +86,14 @@ function makeId(prefix = "mindbet") {
   return globalThis.crypto?.randomUUID?.() || `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function calculateMultiplier(mines: number, safePicks: number) {
+function calculateMultiplier(mines: number, safePicks: number, houseEdgePercent: number) {
   if (safePicks <= 0) return 1;
   let multiplier = 1;
   for (let index = 0; index < safePicks; index += 1) {
     multiplier *= (25 - index) / (25 - mines - index);
   }
-  return Math.max(1.01, Math.floor(multiplier * 0.99 * 100) / 100);
+  const returnRate = (100 - houseEdgePercent) / 100;
+  return Math.max(1.01, Math.floor(multiplier * returnRate * 100) / 100);
 }
 
 export default function MinesPage() {
@@ -192,8 +203,8 @@ export default function MinesPage() {
   const safeTiles = 25 - (game?.mine_count || mineCount);
   const openedTiles = game?.revealed_cells.length || 0;
   const nextMultiplier = active
-    ? calculateMultiplier(game.mine_count, Math.min(openedTiles + 1, safeTiles))
-    : calculateMultiplier(mineCount, 1);
+    ? calculateMultiplier(game.mine_count, Math.min(openedTiles + 1, safeTiles), settings.house_edge_percent)
+    : calculateMultiplier(mineCount, 1, settings.house_edge_percent);
   const nextPayout = Math.min(
     settings.max_payout,
     Number(game?.stake || stake || 0) * nextMultiplier,
@@ -202,6 +213,14 @@ export default function MinesPage() {
   async function startGame() {
     if (!user) {
       await router.push("/auth/login?returnTo=/casino/mines");
+      return;
+    }
+    if (!settings.is_enabled || settings.is_paused) {
+      toast({
+        title: "Mines is unavailable",
+        description: settings.maintenance_message,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -430,6 +449,16 @@ export default function MinesPage() {
               </div>
             )}
 
+            {(!settings.is_enabled || settings.is_paused) && (
+              <div className="flex gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+                <div>
+                  <p className="font-bold text-amber-200">Mines is temporarily paused</p>
+                  <p className="mt-1 text-sm text-amber-100/70">{settings.maintenance_message}</p>
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-4 lg:grid-cols-[360px_1fr] lg:gap-5">
               <Card className="order-2 border-slate-700/70 bg-[#0a1624] text-slate-100 lg:order-1">
                 <CardContent className="space-y-5 p-4 sm:p-5">
@@ -524,7 +553,7 @@ export default function MinesPage() {
                   {!active ? (
                     <Button
                       className="h-12 w-full bg-gradient-to-r from-cyan-400 to-emerald-400 text-base font-black text-slate-950"
-                      disabled={busy || loading}
+                      disabled={busy || loading || !settings.is_enabled || settings.is_paused}
                       onClick={() => void startGame()}
                     >
                       {busy ? (
