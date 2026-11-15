@@ -4,6 +4,7 @@ import { Footer } from "@/components/layout/Footer";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { supabase } from "@/integrations/supabase/client";
 import { useRouter } from "next/router";
+import { getMyWalletBalances } from "@/services/walletService";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -135,6 +136,7 @@ export default function CasinoPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [category, setCategory] = useState<string>("all");
   const [favorites, setFavorites] = useState<number[]>([]);
@@ -158,6 +160,7 @@ export default function CasinoPage() {
         loadProfile(session.user.id);
       } else {
         setProfile(null);
+        setWalletBalance(0);
       }
     });
 
@@ -185,6 +188,9 @@ export default function CasinoPage() {
     if (data) {
       setProfile(data);
     }
+
+    const wallet = await getMyWalletBalances();
+    setWalletBalance(Number(wallet.balances?.available || 0));
   };
 
   const handleAuthClick = () => {
@@ -251,7 +257,7 @@ export default function CasinoPage() {
           profile
             ? {
                 email: user?.email || "",
-                balance: profile.demo_balance || 0,
+                balance: walletBalance,
               }
             : null
         }
