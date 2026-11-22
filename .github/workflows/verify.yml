@@ -2,7 +2,7 @@ name: Verify production build
 
 on:
   push:
-    branches: [main, codex/faucetpay-live]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
