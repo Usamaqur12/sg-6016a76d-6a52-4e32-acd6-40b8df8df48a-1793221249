@@ -1,0 +1,28 @@
+name: Live FaucetPay probe
+
+on:
+  push:
+    branches: [codex/live-faucetpay-probe]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe live endpoints
+        shell: bash
+        run: |
+          probe() {
+            local url="$1"
+            echo "=== ${url} ==="
+            curl --silent --show-error --max-time 20 --location \
+              --write-out $'\nHTTP_STATUS=%{http_code}\nCONTENT_TYPE=%{content_type}\nFINAL_URL=%{url_effective}\n' \
+              "$url" || true
+            echo
+          }
+          probe "https://mindbetpro.com/api/payments/faucetpay/status"
+          probe "https://mindbetpro.com/api/payments/faucetpay/callback"
+          probe "https://mindbetpro.com/account/wallet"
