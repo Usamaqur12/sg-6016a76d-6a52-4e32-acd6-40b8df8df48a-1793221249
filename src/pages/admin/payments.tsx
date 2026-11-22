@@ -51,17 +51,60 @@ type WithdrawalRequest = {
 
 type ApprovalRequest = { id: string; action_type: "manual_deposit" | "large_withdrawal"; entity_id: string; requested_by: string; request_note: string | null; payload: { amount?: number; user_id?: string; destination?: string }; status: string; created_at: string };
 
-type PaymentProviderStatus = {
+function normalizePaymentIdentifier(value: string | null | undefined) {
+  return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isCcPaymentMethod(method: PaymentMethod) {
+  return [method.code, method.provider_code, method.name]
+    .map(normalizePaymentIdentifier)
+    .some((value) => value === "ccpayment" || value === "ccpayments");
+}
+
+function isFaucetPayMethod(method: PaymentMethod) {
+  return [method.code, method.provider_code]
+    .map(normalizePaymentIdentifier)
+    .some((value) => value === "faucetpay");
+}
+
+type FaucetPayConfig = {
+  providerCode: "faucetpay";
+  enabled: boolean;
+  merchantUsername: string;
+  priceCurrency: string;
+  payCurrency: string;
+  siteUrl: string;
   configured: boolean;
-  appIdConfigured: boolean;
-  appSecretConfigured: boolean;
-  fiatIdConfigured: boolean;
-  cryptoDepositsEnabled: boolean;
-  customerCryptoEnabled: boolean;
-  methodExists: boolean;
-  methodEnabled: boolean;
-  webhookUrl: string | null;
+  source: "database" | "environment" | "none";
+  callbackUrl?: string;
 };
+
+const emptyFaucetPayConfig: FaucetPayConfig = {
+  providerCode: "faucetpay",
+  enabled: false,
+  merchantUsername: "",
+  priceCurrency: "USDT",
+  payCurrency: "",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "",
+  configured: false,
+  source: "none",
+};
+
+async function adminPaymentFetch(url: string, init?: RequestInit) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Admin session expired. Sign in again.");
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + session.access_token,
+      ...(init?.headers || {}),
+    },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || "FaucetPay configuration request failed");
+  return body as FaucetPayConfig;
+}
 
 const emptyForm = {
   name: "",
@@ -91,7 +134,11 @@ export default function AdminPayments() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [adminId, setAdminId] = useState<string | null>(null);
-  const [providerStatus, setProviderStatus] = useState<PaymentProviderStatus | null>(null);
+  const [adminRole, setAdminRole] = useState<string | null>(null);
+  const [faucetPayConfig, setFaucetPayConfig] = useState<FaucetPayConfig>(emptyFaucetPayConfig);
+  const [faucetPayConfigLoading, setFaucetPayConfigLoading] = useState(false);
+  const [faucetPayConfigSaving, setFaucetPayConfigSaving] = useState(false);
+  const [faucetPayConfigLoadError, setFaucetPayConfigLoadError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -106,7 +153,7 @@ export default function AdminPayments() {
     if (error) {
       toast({ title: "Payment data could not load", description: error.message, variant: "destructive" });
     } else {
-      setMethods(((methodResult.data || []) as PaymentMethod[]).filter((item) => !item.archived_at));
+      setMethods(((methodResult.data || []) as PaymentMethod[]).filter((item) => !item.archived_at && !isCcPaymentMethod(item)));
       setRequests((requestResult.data || []) as DepositRequest[]);
       setWithdrawals((withdrawalResult.data || []) as WithdrawalRequest[]);
       setProfiles(Object.fromEntries((profileResult.data || []).map((profile) => [profile.id, profile])));
@@ -115,19 +162,23 @@ export default function AdminPayments() {
     setLoading(false);
   }, [toast]);
 
-  const loadProviderStatus = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
-    try {
-      const response = await fetch("/api/admin/payment-providers/status", {
-        headers: { authorization: `Bearer ${session.access_token}` },
-      });
-      const body = await response.json();
-      if (response.ok) setProviderStatus(body as PaymentProviderStatus);
-    } catch {
-      // The payment methods page remains usable while readiness is unavailable.
+  const loadFaucetPayConfig = useCallback(async (role: string | null) => {
+    if (role !== "super_admin") {
+      setFaucetPayConfigLoadError(null);
+      return;
     }
-  }, []);
+    setFaucetPayConfigLoading(true);
+    setFaucetPayConfigLoadError(null);
+    try {
+      setFaucetPayConfig(await adminPaymentFetch("/api/admin/payment-providers/faucetpay"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setFaucetPayConfigLoadError(message);
+      toast({ title: "FaucetPay configuration could not load", description: message, variant: "destructive" });
+    } finally {
+      setFaucetPayConfigLoading(false);
+    }
+  }, [toast]);
 
   const initialize = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -135,14 +186,54 @@ export default function AdminPayments() {
     setAdminId(user.id);
     const { data: profile } = await supabase.from("profiles").select("admin_role").eq("id", user.id).single();
     if (!profile || !canAccessAdminArea(profile.admin_role, "payments")) { await router.push("/"); return; }
-    await Promise.all([loadData(), loadProviderStatus()]);
-  }, [loadData, loadProviderStatus, router]);
+    setAdminRole(profile.admin_role);
+    await Promise.all([loadData(), loadFaucetPayConfig(profile.admin_role)]);
+  }, [loadData, loadFaucetPayConfig, router]);
 
   useEffect(() => { void initialize(); }, [initialize]);
 
   const pendingCount = useMemo(() => requests.filter((item) => item.status === "pending").length + withdrawals.filter((item) => item.status === "pending").length, [requests, withdrawals]);
-  const ccPaymentMethod = methods.find((item) => item.method_type === "provider" && item.provider_code === "ccpayment")
-    || methods.find((item) => item.code === "ccpayment");
+  const faucetPayMethod = useMemo(() => methods.find(isFaucetPayMethod), [methods]);
+  const adminVisibleMethods = useMemo(() => methods.filter((item) => !isFaucetPayMethod(item)), [methods]);
+  const faucetPayCallbackUrl = faucetPayConfig.callbackUrl || (faucetPayConfig.siteUrl
+    ? faucetPayConfig.siteUrl.replace(/\/$/, "") + "/api/payments/faucetpay/callback"
+    : "Save your public HTTPS site URL to generate the callback URL.");
+
+  async function refreshPayments() {
+    await Promise.all([loadData(), loadFaucetPayConfig(adminRole)]);
+  }
+
+  async function saveFaucetPayConfig() {
+    if (adminRole !== "super_admin") return;
+    if (faucetPayConfigLoadError) {
+      toast({ title: "Refresh FaucetPay before saving", description: faucetPayConfigLoadError, variant: "destructive" });
+      return;
+    }
+    if (!faucetPayConfig.merchantUsername.trim() || !faucetPayConfig.priceCurrency.trim() || !faucetPayConfig.siteUrl.trim()) {
+      toast({ title: "Merchant username, price currency and site URL are required", variant: "destructive" });
+      return;
+    }
+    setFaucetPayConfigSaving(true);
+    try {
+      const config = await adminPaymentFetch("/api/admin/payment-providers/faucetpay", {
+        method: "PATCH",
+        body: JSON.stringify({
+          enabled: faucetPayConfig.enabled,
+          merchantUsername: faucetPayConfig.merchantUsername.trim(),
+          priceCurrency: faucetPayConfig.priceCurrency.trim().toUpperCase(),
+          payCurrency: faucetPayConfig.payCurrency.trim().toUpperCase(),
+          siteUrl: faucetPayConfig.siteUrl.trim(),
+        }),
+      });
+      setFaucetPayConfig(config);
+      toast({ title: "FaucetPay configuration saved", description: config.enabled ? "FaucetPay is now available in customer wallets." : "Configuration saved; customer deposits remain disabled." });
+      await loadData();
+    } catch (error) {
+      toast({ title: "FaucetPay configuration save failed", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setFaucetPayConfigSaving(false);
+    }
+  }
 
   function startEdit(method: PaymentMethod) {
     setEditingId(method.id);
@@ -173,6 +264,10 @@ export default function AdminPayments() {
       toast({ title: "Name, code and currency are required", variant: "destructive" });
       return;
     }
+    if ([values.code, values.providerCode].map(normalizePaymentIdentifier).includes("faucetpay")) {
+      toast({ title: "Use the Super Admin FaucetPay panel for this provider", variant: "destructive" });
+      return;
+    }
     if (values.methodType !== "provider" && !values.destination.trim()) {
       toast({ title: "Destination wallet/account is required", variant: "destructive" });
       return;
@@ -195,25 +290,25 @@ export default function AdminPayments() {
       p_display_order: Number(values.displayOrder),
     });
     if (error) toast({ title: "Payment method save failed", description: error.message, variant: "destructive" });
-    else { toast({ title: targetId ? "Payment method updated" : "Payment method added" }); resetForm(); await Promise.all([loadData(), loadProviderStatus()]); }
+    else { toast({ title: targetId ? "Payment method updated" : "Payment method added" }); resetForm(); await loadData(); }
     setProcessing(null);
   }
 
   async function toggleMethod(method: PaymentMethod) {
-    const isCCPayment = method.code === "ccpayment" || method.provider_code === "ccpayment";
-    const nextForm = {
-      name: isCCPayment ? "CCPayment Crypto Checkout" : method.name,
+    await saveMethod({
+      name: method.name,
       code: method.code,
-      methodType: isCCPayment ? "provider" as MethodType : method.method_type,
-      providerCode: isCCPayment ? "ccpayment" : method.provider_code || "",
-      currency: isCCPayment ? "USD" : method.currency,
-      network: isCCPayment ? "Multi-chain" : method.network || "",
-      destination: isCCPayment ? "" : method.destination_reference || "",
-      instructions: isCCPayment ? "Choose your coin and network on the secure CCPayment checkout page." : method.instructions || "",
-      minAmount: String(method.min_amount), maxAmount: String(method.max_amount),
-      displayOrder: String(method.display_order), enabled: !method.is_enabled,
-    };
-    await saveMethod(nextForm, method.id);
+      methodType: method.method_type,
+      providerCode: method.provider_code || "",
+      currency: method.currency,
+      network: method.network || "",
+      destination: method.destination_reference || "",
+      instructions: method.instructions || "",
+      minAmount: String(method.min_amount),
+      maxAmount: String(method.max_amount),
+      displayOrder: String(method.display_order),
+      enabled: !method.is_enabled,
+    }, method.id);
   }
 
   async function archiveMethod(method: PaymentMethod) {
@@ -269,89 +364,45 @@ export default function AdminPayments() {
       <div className="space-y-6 p-4 md:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div><h1 className="flex items-center gap-2 text-2xl font-bold"><CreditCard className="h-6 w-6 text-primary" />Payment Methods</h1><p className="text-sm text-muted-foreground">Add, edit, enable, disable or remove customer payment options.</p></div>
-          <Button variant="outline" onClick={() => void loadData()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh</Button>
+          <Button variant="outline" onClick={() => void refreshPayments()} disabled={loading || faucetPayConfigLoading}><RefreshCw className={`mr-2 h-4 w-4 ${loading || faucetPayConfigLoading ? "animate-spin" : ""}`} />Refresh</Button>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <Card><CardContent className="p-4"><div className="text-2xl font-bold">{methods.length}</div><div className="text-xs text-muted-foreground">Configured methods</div></CardContent></Card>
-          <Card><CardContent className="p-4"><div className="text-2xl font-bold text-success">{methods.filter((item) => item.is_enabled).length}</div><div className="text-xs text-muted-foreground">Enabled for customers</div></CardContent></Card>
+          <Card><CardContent className="p-4"><div className="text-2xl font-bold">{adminVisibleMethods.length + (adminRole === "super_admin" && faucetPayMethod ? 1 : 0)}</div><div className="text-xs text-muted-foreground">Configured methods</div></CardContent></Card>
+          <Card><CardContent className="p-4"><div className="text-2xl font-bold text-success">{adminVisibleMethods.filter((item) => item.is_enabled).length + (adminRole === "super_admin" && faucetPayMethod?.is_enabled ? 1 : 0)}</div><div className="text-xs text-muted-foreground">Enabled for customers</div></CardContent></Card>
           <Card><CardContent className="p-4"><div className="text-2xl font-bold text-warning">{pendingCount}</div><div className="text-xs text-muted-foreground">Finance requests awaiting review</div></CardContent></Card>
         </div>
 
-        <Card className="border-primary/30">
-          <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
-              CCPayment hosted crypto checkout
-              <Badge variant={providerStatus?.configured ? "default" : "outline"}>
-                {providerStatus?.configured ? "Server configured" : "Needs environment keys"}
-              </Badge>
-              <Badge variant={ccPaymentMethod?.is_enabled ? "default" : "secondary"}>
-                {ccPaymentMethod?.is_enabled ? "Customer enabled" : "Customer disabled"}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Customers choose a supported coin and network on CCPayment. Confirmed payments are reconciled through the signed CCPayment API before the wallet ledger is credited.
-            </p>
-            <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded border border-border p-3"><div className="font-medium">App ID</div><div className="text-xs text-muted-foreground">{providerStatus?.appIdConfigured ? "Configured" : "Add CCPAYMENT_APP_ID"}</div></div>
-              <div className="rounded border border-border p-3"><div className="font-medium">App Secret</div><div className="text-xs text-muted-foreground">{providerStatus?.appSecretConfigured ? "Configured" : "Add CCPAYMENT_APP_SECRET"}</div></div>
-              <div className="rounded border border-border p-3"><div className="font-medium">USD fiat ID</div><div className="text-xs text-muted-foreground">{providerStatus?.fiatIdConfigured ? "Override configured" : "Auto-detected from CCPayment"}</div></div>
-              <div className="rounded border border-border p-3"><div className="font-medium">Global crypto switch</div><div className="text-xs text-muted-foreground">{providerStatus?.cryptoDepositsEnabled && providerStatus?.customerCryptoEnabled ? "Enabled" : "Enable both crypto environment switches"}</div></div>
-            </div>
-            {providerStatus?.webhookUrl && (
-              <div className="rounded border border-border bg-muted/30 p-3">
-                <Label>CCPayment Developer → Webhook / notifyUrl</Label>
-                <code className="mt-1 block break-all text-xs text-muted-foreground">{providerStatus.webhookUrl}</code>
+        {adminRole === "super_admin" && (
+          <Card className="border-primary/30">
+            <CardHeader>
+              <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+                FaucetPay hosted merchant checkout
+                <Badge variant={faucetPayConfig.configured ? "default" : "outline"}>{faucetPayConfig.configured ? "Configured" : "Setup required"}</Badge>
+                <Badge variant={faucetPayConfig.enabled && faucetPayMethod?.is_enabled ? "default" : "secondary"}>{faucetPayConfig.enabled && faucetPayMethod?.is_enabled ? "Customer enabled" : "Customer disabled"}</Badge>
+                <Badge variant="outline">Super Admin only</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">FaucetPay Merchant deposits use your approved merchant username and hosted checkout. A permanent Faucet API key is not used for receiving payments.</p>
+              {faucetPayConfigLoadError && <div className="rounded border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{faucetPayConfigLoadError}</div>}
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1.5"><Label>FaucetPay merchant username</Label><Input value={faucetPayConfig.merchantUsername} onChange={(event) => setFaucetPayConfig((current) => ({ ...current, merchantUsername: event.target.value }))} placeholder="Your approved FaucetPay username" disabled={faucetPayConfigLoading || faucetPayConfigSaving} /></label>
+                <label className="space-y-1.5"><Label>Public site URL</Label><Input value={faucetPayConfig.siteUrl} onChange={(event) => setFaucetPayConfig((current) => ({ ...current, siteUrl: event.target.value }))} placeholder="https://mindbetpro.com" disabled={faucetPayConfigLoading || faucetPayConfigSaving} /></label>
+                <label className="space-y-1.5"><Label>Price currency (USD or USDT)</Label><Input value={faucetPayConfig.priceCurrency} onChange={(event) => setFaucetPayConfig((current) => ({ ...current, priceCurrency: event.target.value.toUpperCase() }))} placeholder="USDT" disabled={faucetPayConfigLoading || faucetPayConfigSaving} /></label>
+                <label className="space-y-1.5"><Label>Required payment coin (optional)</Label><Input value={faucetPayConfig.payCurrency} onChange={(event) => setFaucetPayConfig((current) => ({ ...current, payCurrency: event.target.value.toUpperCase() }))} placeholder="Leave blank so customer can choose" disabled={faucetPayConfigLoading || faucetPayConfigSaving} /></label>
               </div>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {!ccPaymentMethod ? (
-                <Button
-                  onClick={() => void saveMethod({
-                    name: "CCPayment Crypto Checkout",
-                    code: "ccpayment",
-                    methodType: "provider",
-                    providerCode: "ccpayment",
-                    currency: "USD",
-                    network: "Multi-chain",
-                    destination: "",
-                    instructions: "Choose your coin and network on the secure CCPayment checkout page.",
-                    minAmount: "10",
-                    maxAmount: "100000",
-                    displayOrder: "10",
-                    enabled: false,
-                  }, null)}
-                  disabled={processing === "new"}
-                >
-                  <Plus className="mr-2 h-4 w-4" />Add CCPayment
-                </Button>
-              ) : (
-                <>
-                  <Button variant="outline" onClick={() => startEdit(ccPaymentMethod)}>
-                    <Pencil className="mr-2 h-4 w-4" />Edit CCPayment
-                  </Button>
-                  <Button
-                    disabled={processing === ccPaymentMethod.id || (!ccPaymentMethod.is_enabled && !providerStatus?.configured)}
-                    onClick={() => void toggleMethod(ccPaymentMethod)}
-                  >
-                    {ccPaymentMethod.is_enabled ? "Disable for customers" : "Enable for customers"}
-                  </Button>
-                </>
-              )}
-              <Button variant="outline" asChild>
-                <a href="https://ccpayment.com/user/developer" target="_blank" rel="noreferrer">
-                  Open CCPayment Developer <ExternalLink className="ml-2 h-4 w-4" />
-                </a>
-              </Button>
-              <Button variant="ghost" onClick={() => void loadProviderStatus()}>Refresh status</Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Keep the method disabled until the environment keys, database migration, CCPayment notifyUrl domain whitelist and deployment outbound-IP whitelist are ready. The USD fiat ID is discovered automatically; CCPAYMENT_USD_FIAT_ID remains an optional override.
-            </p>
-          </CardContent>
-        </Card>
+              <div className="rounded border border-border bg-muted/30 p-3"><Label>FaucetPay callback URL</Label><code className="mt-1 block break-all text-xs text-muted-foreground">{faucetPayCallbackUrl}</code></div>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={faucetPayConfig.enabled} onChange={(event) => setFaucetPayConfig((current) => ({ ...current, enabled: event.target.checked }))} disabled={faucetPayConfigLoading || faucetPayConfigSaving} />Enable FaucetPay for customers after saving</label>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => void saveFaucetPayConfig()} disabled={faucetPayConfigLoading || faucetPayConfigSaving || Boolean(faucetPayConfigLoadError)}>{faucetPayConfigSaving ? "Saving…" : "Save FaucetPay"}</Button>
+                <Button variant="outline" asChild><a href="https://faucetpay.io/merchant" target="_blank" rel="noreferrer">Open FaucetPay Merchant <ExternalLink className="ml-2 h-4 w-4" /></a></Button>
+                <Button variant="ghost" onClick={() => void loadFaucetPayConfig(adminRole)} disabled={faucetPayConfigLoading}>Refresh status</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Merchant approval must be active in FaucetPay. Wallet credit occurs only after FaucetPay verifies the one-time callback token and the server reconciles amount, currency and merchant identity.</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Plus className="h-5 w-5" />{editingId ? "Edit payment method" : "Add payment method"}</CardTitle></CardHeader>
@@ -371,13 +422,13 @@ export default function AdminPayments() {
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.enabled} onChange={(event) => setForm((current) => ({ ...current, enabled: event.target.checked }))} />Enable for customers immediately</label>
             <div className="flex gap-2"><Button onClick={() => void saveMethod()} disabled={processing === (editingId || "new")}>{processing === (editingId || "new") ? "Saving…" : editingId ? "Save changes" : "Add method"}</Button>{editingId && <Button variant="outline" onClick={resetForm}>Cancel</Button>}</div>
-            <p className="text-xs text-muted-foreground">API keys and webhook secrets must stay in cPanel environment variables; this form never stores them.</p>
+            <p className="text-xs text-muted-foreground">Use this generic form only for manual or separately configured providers. FaucetPay is controlled from the Super Admin panel above.</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader><CardTitle>Configured methods</CardTitle></CardHeader>
-          <CardContent>{methods.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">{loading ? "Loading…" : "No payment methods configured."}</p> : <div className="space-y-3">{methods.map((method) => (
+          <CardContent>{adminVisibleMethods.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">{loading ? "Loading…" : "No payment methods configured."}</p> : <div className="space-y-3">{adminVisibleMethods.map((method) => (
             <div key={method.id} className="flex flex-col gap-3 rounded border border-border p-4 lg:flex-row lg:items-center">
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{method.name}</h3><Badge variant={method.is_enabled ? "default" : "outline"}>{method.is_enabled ? "Enabled" : "Disabled"}</Badge><Badge variant="secondary">{method.method_type.replaceAll("_", " ")}</Badge></div><p className="mt-1 break-all text-xs text-muted-foreground">{method.currency}{method.network ? ` · ${method.network}` : ""} · ${method.min_amount.toFixed(2)}–${method.max_amount.toFixed(2)}{method.destination_reference ? ` · ${method.destination_reference}` : ""}</p></div>
               <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => startEdit(method)}><Pencil className="mr-1 h-3.5 w-3.5" />Edit</Button><Button size="sm" variant={method.is_enabled ? "outline" : "default"} disabled={processing === method.id} onClick={() => void toggleMethod(method)}>{method.is_enabled ? "Disable" : "Enable"}</Button><Button size="sm" variant="destructive" disabled={processing === method.id} onClick={() => void archiveMethod(method)}><Trash2 className="mr-1 h-3.5 w-3.5" />Remove</Button></div>

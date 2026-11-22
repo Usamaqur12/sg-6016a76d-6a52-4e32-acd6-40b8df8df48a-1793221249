@@ -31,6 +31,13 @@ type PaymentMethod = {
   display_order: number;
 };
 
+type FaucetPayStatus = {
+  available: boolean;
+  currency: string;
+  minAmount: number | null;
+  maxAmount: number | null;
+};
+
 type WithdrawalRequest = {
   id: string;
   payment_method_id: string;
@@ -64,6 +71,7 @@ export default function WalletPage() {
   const [depositError, setDepositError] = useState("");
   const [cryptoInvoice, setCryptoInvoice] = useState<any>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [faucetPayStatus, setFaucetPayStatus] = useState<FaucetPayStatus | null>(null);
   const [selectedManualMethod, setSelectedManualMethod] = useState<string | null>(null);
   const [manualAmount, setManualAmount] = useState("25");
   const [manualReference, setManualReference] = useState("");
@@ -83,15 +91,24 @@ export default function WalletPage() {
   const [withdrawalMessage, setWithdrawalMessage] = useState("");
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
   const activeProviderMethod = paymentMethods.find(
-    (method) => method.method_type === "provider" && method.provider_code === "ccpayment"
+    (method) => method.method_type === "provider" && method.provider_code === "faucetpay" && faucetPayStatus?.available
   ) || paymentMethods.find(
     (method) => method.method_type === "provider" && method.provider_code === "nowpayments"
   );
   const activeProviderCode = activeProviderMethod?.provider_code;
   const providerMethodEnabled = Boolean(activeProviderMethod);
-  const cryptoEnabled = process.env.NEXT_PUBLIC_CRYPTO_DEPOSITS_ENABLED === "true" && providerMethodEnabled;
+  const cryptoEnabled = activeProviderCode === "faucetpay"
+    ? Boolean(faucetPayStatus?.available)
+    : process.env.NEXT_PUBLIC_CRYPTO_DEPOSITS_ENABLED === "true" && providerMethodEnabled;
   const manualMethods = paymentMethods.filter((method) => method.method_type !== "provider");
-  const accountActivated = Boolean(profile && profile.account_status !== "closed" && !profile.is_suspended);
+  const accountActivated = Boolean(
+    profile
+    && profile.account_status !== "closed"
+    && !profile.is_admin
+    && !profile.is_suspended
+    && !profile.wallet_frozen
+    && !profile.deposits_disabled
+  );
   const withdrawalKycApproved = profile?.kyc_status === "approved";
 
   useEffect(() => {
@@ -123,7 +140,7 @@ export default function WalletPage() {
       }
     );
 
-    await Promise.all([loadTransactions(user.id), loadBalances(), loadPaymentMethods(), loadWithdrawals(), loadWithdrawalAddresses()]);
+    await Promise.all([loadTransactions(user.id), loadBalances(), loadPaymentMethods(), loadFaucetPayStatus(), loadWithdrawals(), loadWithdrawalAddresses()]);
   }
 
   async function loadWithdrawals() {
@@ -176,9 +193,26 @@ export default function WalletPage() {
       .select("*")
       .eq("is_enabled", true)
       .order("display_order", { ascending: true });
-    const active = ((data || []) as PaymentMethod[]).filter((method) => method.is_enabled);
+    const active = ((data || []) as PaymentMethod[]).filter((method) => {
+      const normalized = [method.code, method.provider_code, method.name]
+        .map((value) => (value || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+      return method.is_enabled && !normalized.some((value) => value === "ccpayment" || value === "ccpayments");
+    });
     setPaymentMethods(active);
     setSelectedManualMethod((current) => current && active.some((method) => method.id === current) ? current : null);
+  }
+
+  async function loadFaucetPayStatus() {
+    try {
+      const response = await fetch("/api/payments/faucetpay/status", { cache: "no-store" });
+      if (!response.ok) {
+        setFaucetPayStatus(null);
+        return;
+      }
+      setFaucetPayStatus(await response.json() as FaucetPayStatus);
+    } catch {
+      setFaucetPayStatus(null);
+    }
   }
 
   async function loadBalances() {
@@ -199,27 +233,60 @@ export default function WalletPage() {
 
   async function createCryptoDeposit() {
     const amount = Number(depositAmount);
-    if (!Number.isFinite(amount) || amount < 10) { setDepositError("Minimum crypto deposit is $10."); return; }
-    setCreatingDeposit(true); setDepositError("");
+    const minimum = Number(activeProviderMethod?.min_amount ?? faucetPayStatus?.minAmount ?? 10);
+    const maximum = Number(activeProviderMethod?.max_amount ?? faucetPayStatus?.maxAmount ?? 100000);
+    if (!Number.isFinite(amount) || amount < minimum || amount > maximum) {
+      setDepositError("Amount must be between " + minimum.toFixed(2) + " and " + maximum.toFixed(2) + " " + (activeProviderMethod?.currency || "USD") + ".");
+      return;
+    }
+    setCreatingDeposit(true);
+    setDepositError("");
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Please sign in again.");
-      const isCCPayment = activeProviderCode === "ccpayment";
-      const response = await fetch(isCCPayment ? "/api/payments/crypto/ccpayment-create" : "/api/payments/crypto/create", {
+      const isFaucetPay = activeProviderCode === "faucetpay";
+      const response = await fetch(isFaucetPay ? "/api/payments/faucetpay/create" : "/api/payments/crypto/create", {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
+        headers: { "content-type": "application/json", authorization: "Bearer " + session.access_token },
         body: JSON.stringify({
           amount,
-          ...(isCCPayment ? {} : { payCurrency: depositCurrency }),
+          ...(isFaucetPay ? {} : { payCurrency: depositCurrency }),
           idempotencyKey: globalThis.crypto.randomUUID(),
         }),
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Deposit invoice could not be created.");
+      if (!response.ok) throw new Error(body.error || "Deposit checkout could not be created.");
+
+      if (isFaucetPay) {
+        const checkoutUrl = body.checkout?.url;
+        const checkoutFields = body.checkout?.fields;
+        if (checkoutUrl !== "https://faucetpay.io/merchant/webscr" || !checkoutFields || typeof checkoutFields !== "object") {
+          throw new Error("FaucetPay returned an invalid checkout response.");
+        }
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = checkoutUrl;
+        form.style.display = "none";
+        for (const [name, value] of Object.entries(checkoutFields as Record<string, string>)) {
+          if (typeof value !== "string") continue;
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = name;
+          input.value = value;
+          form.appendChild(input);
+        }
+        document.body.appendChild(form);
+        form.submit();
+        form.remove();
+        return;
+      }
+
       setCryptoInvoice(body.invoice);
     } catch (error) {
-      setDepositError(error instanceof Error ? error.message : "Deposit invoice could not be created.");
-    } finally { setCreatingDeposit(false); }
+      setDepositError(error instanceof Error ? error.message : "Deposit checkout could not be created.");
+    } finally {
+      setCreatingDeposit(false);
+    }
   }
 
   async function submitManualDeposit() {
@@ -375,35 +442,25 @@ export default function WalletPage() {
                 <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 text-sm">Account activation is required before creating a crypto deposit invoice.</div>
               ) : cryptoInvoice ? (
                 <div className="grid gap-4">
-                  {cryptoInvoice.checkout_url ? (
-                    <div className="rounded-lg border border-success/30 bg-success/5 p-4">
-                      <div className="text-xs uppercase text-muted-foreground">CCPayment secure checkout</div>
-                      <p className="mt-2 text-sm text-muted-foreground">Choose a supported coin and network on CCPayment. Your wallet is credited only after the payment is confirmed and reconciled.</p>
-                      <Button className="mt-4 w-full" onClick={() => window.location.assign(cryptoInvoice.checkout_url)}>
-                        Continue to CCPayment
-                      </Button>
+                  <div className="rounded-lg border border-success/30 bg-success/5 p-4">
+                    <div className="text-xs uppercase text-muted-foreground">Send exactly</div>
+                    <div className="mt-1 text-2xl font-bold font-mono">{cryptoInvoice.pay_amount} {String(cryptoInvoice.pay_currency).toUpperCase()}</div>
+                    <div className="mt-3 text-xs uppercase text-muted-foreground">Provider deposit address</div>
+                    <div className="mt-1 flex gap-2">
+                      <Input readOnly value={cryptoInvoice.pay_address || ""} className="font-mono text-xs" />
+                      <Button variant="outline" size="icon" onClick={() => void navigator.clipboard.writeText(cryptoInvoice.pay_address || "")}><Copy className="h-4 w-4" /></Button>
                     </div>
-                  ) : (
-                    <div className="rounded-lg border border-success/30 bg-success/5 p-4">
-                      <div className="text-xs uppercase text-muted-foreground">Send exactly</div>
-                      <div className="mt-1 text-2xl font-bold font-mono">{cryptoInvoice.pay_amount} {String(cryptoInvoice.pay_currency).toUpperCase()}</div>
-                      <div className="mt-3 text-xs uppercase text-muted-foreground">Provider deposit address</div>
-                      <div className="mt-1 flex gap-2">
-                        <Input readOnly value={cryptoInvoice.pay_address || ""} className="font-mono text-xs" />
-                        <Button variant="outline" size="icon" onClick={() => void navigator.clipboard.writeText(cryptoInvoice.pay_address || "")}><Copy className="h-4 w-4" /></Button>
-                      </div>
-                      <p className="mt-3 text-xs text-muted-foreground">The wallet is credited only after the provider reports a completed blockchain payment. Sending a different asset or network may permanently lose funds.</p>
-                    </div>
-                  )}
+                    <p className="mt-3 text-xs text-muted-foreground">The wallet is credited only after the provider reports a completed blockchain payment. Sending a different asset or network may permanently lose funds.</p>
+                  </div>
                   <Button variant="outline" onClick={() => setCryptoInvoice(null)}>Create another invoice</Button>
                 </div>
               ) : (
-                <div className={`grid gap-4 ${activeProviderCode === "ccpayment" ? "sm:grid-cols-[1fr_auto]" : "sm:grid-cols-[1fr_1fr_auto]"} sm:items-end`}>
+                <div className={`grid gap-4 ${activeProviderCode === "faucetpay" ? "sm:grid-cols-[1fr_auto]" : "sm:grid-cols-[1fr_1fr_auto]"} sm:items-end`}>
                   <div className="grid gap-2">
-                    <Label htmlFor="deposit-amount">USD amount</Label>
-                    <Input id="deposit-amount" type="number" min="10" max="100000" step="0.01" value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)} />
+                    <Label htmlFor="deposit-amount">{activeProviderMethod?.currency || "USD"} amount</Label>
+                    <Input id="deposit-amount" type="number" min={activeProviderMethod?.min_amount || 10} max={activeProviderMethod?.max_amount || 100000} step="0.01" value={depositAmount} onChange={(event) => setDepositAmount(event.target.value)} />
                   </div>
-                  {activeProviderCode !== "ccpayment" && (
+                  {activeProviderCode !== "faucetpay" && (
                     <div className="grid gap-2">
                       <Label>Cryptocurrency / network</Label>
                       <Select value={depositCurrency} onValueChange={setDepositCurrency}>
@@ -419,8 +476,9 @@ export default function WalletPage() {
                     </div>
                   )}
                   <Button disabled={creatingDeposit} onClick={() => void createCryptoDeposit()}>
-                    {creatingDeposit ? "Creating…" : activeProviderCode === "ccpayment" ? "Continue to Secure Checkout" : "Create invoice"}
+                    {creatingDeposit ? "Creating…" : activeProviderCode === "faucetpay" ? "Continue to FaucetPay" : "Create invoice"}
                   </Button>
+                  {activeProviderCode === "faucetpay" && <p className="text-xs text-muted-foreground sm:col-span-2">You will complete payment on FaucetPay. Wallet credit is applied only after the verified callback is reconciled.</p>}
                 </div>
               )}
               {depositError && <p className="text-sm text-destructive">{depositError}</p>}
