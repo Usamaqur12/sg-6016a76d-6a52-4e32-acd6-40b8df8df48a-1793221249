@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Probe live endpoints
+      - name: Probe live endpoints and deployed bundles
         shell: bash
         run: |
           probe() {
@@ -26,3 +26,32 @@ jobs:
           probe "https://mindbetpro.com/api/payments/faucetpay/status"
           probe "https://mindbetpro.com/api/payments/faucetpay/callback"
           probe "https://mindbetpro.com/account/wallet"
+
+          inspect_page() {
+            local page="$1"
+            local label="$2"
+            local html="/tmp/${label}.html"
+            echo "=== DEPLOYED BUNDLE: ${page} ==="
+            curl --silent --show-error --fail --max-time 20 --location "$page" -o "$html"
+            grep -oE 'src="[^"]+\.js"' "$html" | cut -d'"' -f2 | sort -u > "/tmp/${label}-scripts.txt"
+            found_faucet=0
+            found_cc=0
+            found_button=0
+            while IFS= read -r path; do
+              case "$path" in
+                http*) script_url="$path" ;;
+                *) script_url="https://mindbetpro.com$path" ;;
+              esac
+              js="/tmp/${label}-$(echo "$path" | sha256sum | cut -d' ' -f1).js"
+              curl --silent --show-error --fail --max-time 20 --location "$script_url" -o "$js" || continue
+              if grep -Fq "FaucetPay hosted merchant checkout" "$js"; then found_faucet=1; fi
+              if grep -Fq "CCPayment hosted crypto checkout" "$js"; then found_cc=1; fi
+              if grep -Fq "Continue to FaucetPay" "$js"; then found_button=1; fi
+            done < "/tmp/${label}-scripts.txt"
+            echo "FAUCETPAY_ADMIN_UI=${found_faucet}"
+            echo "CCPAYMENT_ADMIN_UI=${found_cc}"
+            echo "FAUCETPAY_WALLET_BUTTON=${found_button}"
+          }
+
+          inspect_page "https://mindbetpro.com/admin/payments" "admin"
+          inspect_page "https://mindbetpro.com/account/wallet" "wallet"
